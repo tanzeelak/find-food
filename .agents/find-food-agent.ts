@@ -27,7 +27,8 @@ const definition: AgentDefinition = {
 
   instructionsPrompt: `
 Execute the following steps:
-1. Use the Exa MCP to find nearby restaurants in Lower Haight"
+1. Use the Exa MCP to find nearby gluten-free restaurants in Lower Haight
+2. Use Exa to find the exact gluten-free menu items from those restaurants 
 `,
 
   // @ts-ignore
