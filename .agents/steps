@@ -4,6 +4,7 @@ MVP
 [x] show me specific items from each of the menus from the restaurants
 
 TODOS
+- Subagents instead
 - Use the codebuff output schema
 - Get the location automatically
 - Improve context of results with Yelp
@@ -11,4 +12,4 @@ TODOS
 
 Subagents
 - Copy your entire agent
-- Restaurant researcher
+- Restaurant researchers in parallel

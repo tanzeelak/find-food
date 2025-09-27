@@ -14,20 +14,24 @@
 import type { AgentDefinition } from './types/agent-definition'
 
 const definition: AgentDefinition = {
-  id: 'find-food-agent',
-  displayName: 'Find Food Agent',
+  id: 'research-restaurant',
+  displayName: 'Research Restaurant',
 
   model: 'anthropic/claude-4-sonnet-20250522',
-  spawnableAgents: ["research-restaurant"],
+  spawnableAgents: [],
 
   // Check out .agents/types/tools.ts for more information on the tools you can include.
-  toolNames: ["spawn_agents"],
+  toolNames: [],
 
-  spawnerPrompt: 'Spawn when you need to find a nearby restaurants',
+  spawnerPrompt: 'Provide a restaurant to research',
 
   instructionsPrompt: `
-Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in the Lower Haight area of San Francisco. 
-1. For each candidate restuarant, spawn restaurant-researcher. Just show the the results of all of these agents.
+Use the Exa MCP to figure out if this restaurant has menu items that meet my dietary restrictions
+If so, provide the result in following ormat:
+1. Restaurant name
+2. Specific menu items that meet ALL three dietary restrictions (gluten-free, dairy-free, pescatarian)
+3. 10-20 word description of the vibe of the restaurant
+4. Clickable URL link to menu of the restaurant, not just the restaurant's website.
 `,
 
   // @ts-ignore
@@ -36,18 +40,6 @@ Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly re
       "type": "http",
       "url": 'https://mcp.exa.ai/mcp?exaApiKey=7d543fc7-49ba-48eb-9ca6-3c7f1216008d',
     },
-    // "yelp_agent": {
-    //   "command": "uv",
-    //   "args": [
-    //     "--directory",
-    //     ".",
-    //     "run",
-    //     "mcp-yelp-agent"
-    //   ],
-    //   "env": {
-    //     "YELP_API_KEY": "<YOUR_YELP_FUSION_API_KEY>"
-    //   }
-    // }
   }
 
 
