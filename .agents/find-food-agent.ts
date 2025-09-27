@@ -26,9 +26,11 @@ const definition: AgentDefinition = {
   spawnerPrompt: 'Spawn when you need to find a nearby restaurant',
 
   instructionsPrompt: `
-Execute the following steps:
-1. Use the Exa MCP to find nearby gluten-free, dairy-free, pescatarian friendly restaurants in Lower Haight
-2. Find the exact menu items from those restaurants that meet all of these dietary restrictions. Do not include cocktails. Display just these menu items and the vibes of the restaurant.
+Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian restaurants in the Lower Haight area of San Francisco. For each restaurant, please provide:
+1. Restaurant name
+2. Specific menu items that meet ALL three dietary restrictions (gluten-free, dairy-free, pescatarian)
+3. The overall vibe of the restaurant
+4. URL link to menu of the restaurant, not just the restaurant's website.
 `,
 
   // @ts-ignore
@@ -36,7 +38,19 @@ Execute the following steps:
     "exa": {
       "type": "http",
       "url": 'https://mcp.exa.ai/mcp?exaApiKey=7d543fc7-49ba-48eb-9ca6-3c7f1216008d',
-    }
+    },
+    // "yelp_agent": {
+    //   "command": "uv",
+    //   "args": [
+    //     "--directory",
+    //     ".",
+    //     "run",
+    //     "mcp-yelp-agent"
+    //   ],
+    //   "env": {
+    //     "YELP_API_KEY": "<YOUR_YELP_FUSION_API_KEY>"
+    //   }
+    // }
   }
 
 

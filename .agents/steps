@@ -1,9 +1,10 @@
 MVP
 [x] agent that can acess the yelp or exa MCP
-- search for "gluten free" restaurants
-- show me specific items from each of the menus from the restaurants
+[x] search for "gluten free" restaurants
+[x] show me specific items from each of the menus from the restaurants
 
-- smithery gives us a key
-
-V1
-- 
+TODOS
+- Use the codebuff output schema
+- Get the location automatically
+- Improve context of results with Yelp
+- Allow user to customize the dieteary restrictions
