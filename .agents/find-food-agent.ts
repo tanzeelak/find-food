@@ -27,8 +27,8 @@ const definition: AgentDefinition = {
 
   instructionsPrompt: `
 Execute the following steps:
-1. Use the Exa MCP to find nearby gluten-free restaurants in Lower Haight
-2. Use Exa to find the exact gluten-free menu items from those restaurants 
+1. Use the Exa MCP to find nearby gluten-free, dairy-free, pescatarian friendly restaurants in Lower Haight
+2. Find the exact menu items from those restaurants that meet all of these dietary restrictions. Do not include cocktails. Display just these menu items and the vibes of the restaurant.
 `,
 
   // @ts-ignore
