@@ -1,0 +1,6 @@
+{
+  "maxAgentSteps": 25,
+  "addedSpawnableAgents": [
+    "find-food-agent"
+  ]
+}
