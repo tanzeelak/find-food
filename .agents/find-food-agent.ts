@@ -28,6 +28,7 @@ const definition: AgentDefinition = {
   instructionsPrompt: `
 Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in the Lower Haight area of San Francisco. 
 1. For each candidate restuarant, spawn restaurant-researcher. Just show the the results of all of these agents.
+2. Output to a csv file with the current prompt and the resutls
 `,
 
   // @ts-ignore

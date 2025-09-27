@@ -17,7 +17,7 @@ const definition: AgentDefinition = {
   id: 'research-restaurant',
   displayName: 'Research Restaurant',
 
-  model: 'anthropic/claude-4-sonnet-20250522',
+  model: 'x-ai/grok-4-fast:free',
   spawnableAgents: [],
 
   // Check out .agents/types/tools.ts for more information on the tools you can include.
