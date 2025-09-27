@@ -29,8 +29,8 @@ const definition: AgentDefinition = {
 Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian restaurants in the Lower Haight area of San Francisco. For each restaurant, please provide:
 1. Restaurant name
 2. Specific menu items that meet ALL three dietary restrictions (gluten-free, dairy-free, pescatarian)
-3. The overall vibe of the restaurant
-4. URL link to menu of the restaurant, not just the restaurant's website.
+3. 10-20 word description of the vibe of the restaurant
+4. Clickable URL link to menu of the restaurant, not just the restaurant's website.
 `,
 
   // @ts-ignore
