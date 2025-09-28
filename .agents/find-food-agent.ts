@@ -25,7 +25,7 @@ const definition: AgentDefinition = {
   toolNames: ["spawn_agents"],
   // "write_file"
 
-  spawnerPrompt: 'Spawn when you need to find a nearby restaurants',
+  spawnerPrompt: 'Spawn when you need to find nearby restaurants',
 
   instructionsPrompt: `
 Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in the Lower Haight area of San Francisco. 
@@ -37,7 +37,7 @@ Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly re
   "mcpServers": {
     "exa": {
       "type": "http",
-      "url": 'https://mcp.exa.ai/mcp?exaApiKey=7d543fc7-49ba-48eb-9ca6-3c7f1216008d',
+      "url": 'https://mcp.exa.ai/mcp',
     },
   }
 

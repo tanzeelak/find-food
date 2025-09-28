@@ -39,7 +39,7 @@ If so, provide the result in following ormat:
   "mcpServers": {
     "exa": {
       "type": "http",
-      "url": 'https://mcp.exa.ai/mcp?exaApiKey=7d543fc7-49ba-48eb-9ca6-3c7f1216008d',
+      "url": 'https://mcp.exa.ai/mcp',
     },
   }
 
