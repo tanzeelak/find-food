@@ -16,6 +16,7 @@ import type { AgentDefinition } from './types/agent-definition'
 const definition: AgentDefinition = {
   id: 'research-restaurant',
   displayName: 'Research Restaurant',
+  publisher: "tanzeela",
 
   model: 'x-ai/grok-4-fast:free',
   spawnableAgents: [],
