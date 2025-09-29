@@ -18,7 +18,7 @@ const definition: AgentDefinition = {
   displayName: 'Research Restaurant',
   publisher: "tanzeela",
 
-  model: 'x-ai/grok-4-fast:free',
+  model: 'anthropic/claude-4-sonnet-20250522',
   spawnableAgents: [],
   includeMessageHistory: true,
   // Check out .agents/types/tools.ts for more information on the tools you can include.
