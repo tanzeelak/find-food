@@ -1,16 +1,3 @@
-/*
- *  EDIT ME to create your own agent!
- *
- *  Change any field below, and consult the AgentDefinition type for information on all fields and their purpose.
- *
- *  Run your agent with:
- *  > codebuff --agent git-committer
- *
- *  Or, run codebuff normally, and use the '@' menu to mention your agent, and codebuff will spawn it for you.
- *
- *  Finally, you can publish your agent with 'codebuff publish your-custom-agent' so users from around the world can run it.
- */
-
 import type { AgentDefinition } from './types/agent-definition'
 import { env } from 'process'
 
@@ -59,14 +46,6 @@ If the restaurant has suitable menu items, provide the result in the following f
       "url": `https://mcp.exa.ai/mcp?${env.EXA_API_KEY}`,
     },
   }
-
-
-  // Add more fields here to customize your agent further:
-  // - system prompt
-  // - input/output schema
-  // - handleSteps
-
-  // Check out the examples in .agents/examples for more ideas!
 }
 
 export default definition
