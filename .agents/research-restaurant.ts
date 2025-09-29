@@ -20,7 +20,7 @@ const definition: AgentDefinition = {
 
   model: 'x-ai/grok-4-fast:free',
   spawnableAgents: [],
-
+  includeMessageHistory: true,
   // Check out .agents/types/tools.ts for more information on the tools you can include.
   toolNames: [],
 

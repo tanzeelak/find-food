@@ -20,6 +20,7 @@ const definition: AgentDefinition = {
 
   model: 'anthropic/claude-4-sonnet-20250522',
   spawnableAgents: ["research-restaurant"],
+  includeMessageHistory: true,
 
   // Check out .agents/types/tools.ts for more information on the tools you can include.
   toolNames: ["spawn_agents"],
@@ -28,7 +29,7 @@ const definition: AgentDefinition = {
   spawnerPrompt: 'Spawn when you need to find nearby restaurants',
 
   instructionsPrompt: `
-Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in the Lower Haight area of San Francisco. 
+Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in user's input location. If they don't provide a location, search in the Mission District of SF.
 1. For each candidate restuarant, spawn restaurant-researcher. Just show the the results of all of these agents.
 `,
 // 2. Output to a csv file with the current prompt and the results
