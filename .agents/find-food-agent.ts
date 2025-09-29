@@ -26,11 +26,33 @@ const definition: AgentDefinition = {
   toolNames: ["spawn_agents"],
   // "write_file"
 
+  inputSchema: {
+    prompt: { type: 'string', description: 'Additional context or preferences for restaurant search (optional)' },
+    params: {
+      type: 'object',
+      properties: {
+        location: {
+          type: 'string',
+          description: 'Location to search for restaurants (e.g., "Mission District SF", "Downtown Portland")',
+          default: "Mission District SF"
+        },
+        dietaryRestrictions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of dietary restrictions (e.g., ["gluten-free", "dairy-free", "pescatarian"])',
+          default: ["gluten-free", "dairy-free", "pescatarian"]
+        }
+      }
+    }
+  },
+
   spawnerPrompt: 'Spawn when you need to find nearby restaurants',
 
   instructionsPrompt: `
-Use the Exa MCP to help me find gluten-free, dairy-free, pescatarian friendly restaurants in user's input location. If they don't provide a location, search in the Mission District of SF.
-1. For each candidate restuarant, spawn restaurant-researcher. Just show the the results of all of these agents.
+Use the Exa MCP to help me find restaurants that meet the specified dietary restrictions in the specified location.
+The location is provided in params.location (defaults to "Mission District SF" if not specified).
+The dietary restrictions are provided in params.dietaryRestrictions as an array of strings (e.g., ["gluten-free", "dairy-free", "pescatarian"]).
+1. For each candidate restaurant, spawn research-restaurant agent and pass the dietary restrictions to it. Just show the results of all of these agents.
 `,
 // 2. Output to a csv file with the current prompt and the results
 
