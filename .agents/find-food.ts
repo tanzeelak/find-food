@@ -12,6 +12,7 @@
  */
 
 import type { AgentDefinition } from './types/agent-definition'
+import { env } from 'process'
 
 const definition: AgentDefinition = {
   id: 'find-food',
@@ -49,7 +50,7 @@ const definition: AgentDefinition = {
   spawnerPrompt: 'Spawn when you need to find nearby restaurants',
 
   instructionsPrompt: `
-Use the Exa MCP to help me find restaurants that meet the specified dietary restrictions in the specified location.
+Use the Exa MCP to help me find restaurants that meet the specified dietary restrictions within 1 mile of the specified location.
 The location is provided in params.location (defaults to "Mission District SF" if not specified).
 The dietary restrictions are provided in params.dietaryRestrictions as an array of strings (e.g., ["gluten-free", "dairy-free", "pescatarian"]).
 1. For each candidate restaurant, spawn research-restaurant agent and pass the dietary restrictions to it. Just show the results of all of these agents.
@@ -60,7 +61,7 @@ The dietary restrictions are provided in params.dietaryRestrictions as an array 
   "mcpServers": {
     "exa": {
       "type": "http",
-      "url": 'https://mcp.exa.ai/mcp',
+      "url": `https://mcp.exa.ai/mcp?${env.EXA_API_KEY}`,
     },
   }
 

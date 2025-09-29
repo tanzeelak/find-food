@@ -12,6 +12,7 @@
  */
 
 import type { AgentDefinition } from './types/agent-definition'
+import { env } from 'process'
 
 const definition: AgentDefinition = {
   id: 'research-restaurant',
@@ -55,7 +56,7 @@ If the restaurant has suitable menu items, provide the result in the following f
   "mcpServers": {
     "exa": {
       "type": "http",
-      "url": 'https://mcp.exa.ai/mcp',
+      "url": `https://mcp.exa.ai/mcp?${env.EXA_API_KEY}`,
     },
   }
 
