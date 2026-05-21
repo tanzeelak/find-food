@@ -1,10 +1,10 @@
-# find-restaurants
+# Find _your_ food
 
 **Published:** [find-food on Codebuff](https://www.codebuff.com/publishers/tanzeela/agents/find-food/0.0.5) — 🥇 First place at the Codebuff Agent Builder Hackathon
 
 ![find-food screenshot](screenshot.webp)
 
-An AI-powered food recommendation agent built around my own specific dietary restrictions. Most apps stop at "vegetarian-friendly" — this goes further, asking "can I actually eat this, and is it nourishing?" That requires scouring individual menu items, not just restaurant tags.
+An AI-powered agent that finds specific menu items — not just restaurants — that match your dietary restrictions. Most apps stop at "vegetarian-friendly." This goes further, asking "can I actually eat this, and is it nourishing?" by scouring individual menus item by item.
 
 ## How it works
 
