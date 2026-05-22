@@ -60,6 +60,5 @@ Each matching restaurant is returned with specific menu items, a vibe summary, a
 ## Planned improvements
 
 - Let users set dietary restrictions interactively
-- Auto-detect location
 - Use Codebuff output schema for structured results
 - Investigate result consistency across runs

@@ -10,9 +10,7 @@ const definition: AgentDefinition = {
   spawnableAgents: ["research-restaurant"],
   includeMessageHistory: true,
 
-  // Check out .agents/types/tools.ts for more information on the tools you can include.
-  toolNames: ["spawn_agents"],
-  // "write_file"
+  toolNames: ["spawn_agents", "run_terminal_command", "add_message"],
 
   inputSchema: {
     prompt: { type: 'string', description: 'Additional context or preferences for restaurant search (optional)' },
@@ -21,8 +19,7 @@ const definition: AgentDefinition = {
       properties: {
         location: {
           type: 'string',
-          description: 'Location to search for restaurants (e.g., "Mission District SF", "Downtown Portland")',
-          default: "Mission District SF"
+          description: 'Location to search for restaurants (e.g., "Mission District SF", "Downtown Portland"). If omitted, location will be auto-detected.',
         },
         dietaryRestrictions: {
           type: 'array',
@@ -38,11 +35,48 @@ const definition: AgentDefinition = {
 
   instructionsPrompt: `
 Use the Exa MCP to help me find restaurants that meet the specified dietary restrictions within 1 mile of the specified location.
-The location is provided in params.location (defaults to "Mission District SF" if not specified).
 The dietary restrictions are provided in params.dietaryRestrictions as an array of strings (e.g., ["gluten-free", "dairy-free", "pescatarian"]).
-1. For each candidate restaurant, spawn research-restaurant agent and pass the dietary restrictions to it. Just show the results of all of these agents.
+For each candidate restaurant, spawn a research-restaurant agent and pass the dietary restrictions to it. Show the results of all of these agents.
 `,
-// 2. Output to a csv file with the current prompt and the results
+
+  handleSteps: function* ({ params, logger }) {
+    let location = (params as any)?.location as string | undefined
+
+    if (!location) {
+      logger.info('No location provided — detecting via IP geolocation')
+      const { toolResult } = yield {
+        toolName: 'run_terminal_command',
+        input: { command: 'curl -s https://ipapi.co/json/', timeout_seconds: 10 },
+      }
+
+      if (toolResult?.[0]?.type === 'json') {
+        try {
+          const cmdOutput = toolResult[0].value as any
+          const geo = JSON.parse(cmdOutput.stdout ?? '')
+          if (geo.city) {
+            location = [geo.city, geo.region_code].filter(Boolean).join(', ')
+            logger.info(`Detected location: ${location}`)
+          }
+        } catch {
+          // fall through — location stays undefined
+        }
+      }
+    }
+
+    const restrictions = (params as any)?.dietaryRestrictions ?? []
+
+    yield {
+      toolName: 'add_message',
+      input: {
+        role: 'user',
+        content: location
+          ? `Find restaurants near "${location}" with dietary restrictions: ${JSON.stringify(restrictions)}`
+          : `Could not auto-detect location. Dietary restrictions: ${JSON.stringify(restrictions)}. Please ask the user for their location before searching.`,
+      },
+    }
+
+    yield 'STEP_ALL'
+  },
 
   // @ts-ignore
   "mcpServers": {
