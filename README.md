@@ -61,3 +61,6 @@ Each matching restaurant is returned with specific menu items, a vibe summary, a
 - Auto switch models. Switch to Grok 4.3
 - Let users set dietary restrictions interactively
 - Investigate result consistency across runs
+- Make location finder more context specific
+- Deploy this onto a frontend
+    - Have frontend remember my profile
