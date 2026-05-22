@@ -58,9 +58,6 @@ Each matching restaurant is returned with specific menu items, a vibe summary, a
 **Consistency is an open question.** Results varied noticeably across runs, even though restaurant menus are largely static. The source of that variability is worth digging into.
 
 ## Planned improvements
-
-- Let users set dietary restrictions interactively
-- Use Codebuff output schema for structured results
-- Investigate result consistency across runs
 - Auto switch models. Switch to Grok 4.3
-- Limit options to 5
+- Let users set dietary restrictions interactively
+- Investigate result consistency across runs

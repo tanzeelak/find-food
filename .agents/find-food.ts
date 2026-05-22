@@ -37,7 +37,16 @@ const definition: AgentDefinition = {
 Use the Exa MCP to help find restaurants that meet the specified dietary restrictions within 1 mile of the specified location.
 The dietary restrictions are provided in params.dietaryRestrictions as an array of strings (e.g., ["gluten-free", "dairy-free", "pescatarian"]).
 If params.location is not provided, ask the user for their location before searching.
-For each candidate restaurant, spawn a research-restaurant agent and pass the dietary restrictions to it. Show the results of all of these agents.
+Return at most 5 restaurants in your final output. Pick the 5 best candidates that match the dietary restrictions and proximity criteria.
+For each of the (up to 5) candidate restaurants, spawn a research-restaurant agent and pass the dietary restrictions to it.
+
+Format each restaurant result CONCISELY using exactly this structure (and nothing else):
+
+**<Restaurant Name>** — <distance from user, e.g. "0.4 mi" or "~8 min walk">
+- Menu items: <comma-separated list of specific dishes that meet the dietary restrictions>
+- Dietary accommodations: <short summary of how the restaurant accommodates the restrictions, e.g. "dedicated GF fryer; tamari available; 100% dairy-free">
+
+Do NOT include "Perfect for", "Bonus", "Highlights", ratings, hours, addresses, ⭐ icons, or any other sections. Keep it tight.
 `,
 
   // @ts-ignore
