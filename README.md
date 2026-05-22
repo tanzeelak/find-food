@@ -62,3 +62,5 @@ Each matching restaurant is returned with specific menu items, a vibe summary, a
 - Let users set dietary restrictions interactively
 - Use Codebuff output schema for structured results
 - Investigate result consistency across runs
+- Auto switch models. Switch to Grok 4.3
+- Limit options to 5
