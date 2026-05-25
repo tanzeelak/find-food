@@ -1,5 +1,4 @@
 import type { AgentDefinition } from './types/agent-definition'
-import { env } from 'process'
 
 const definition: AgentDefinition = {
   id: 'research-restaurant',
@@ -43,7 +42,11 @@ If the restaurant has suitable menu items, provide the result in the following f
   "mcpServers": {
     "exa": {
       "type": "http",
-      "url": `https://mcp.exa.ai/mcp?${env.EXA_API_KEY}`,
+      // $EXA_API_KEY is a literal placeholder — Codebuff resolves it from the
+      // END USER's local environment at agent runtime. Do NOT use a JS template
+      // literal like `${env.EXA_API_KEY}` here, or the publisher's key gets
+      // baked into the published agent artifact.
+      "url": "https://mcp.exa.ai/mcp?$EXA_API_KEY",
     },
   }
 }
