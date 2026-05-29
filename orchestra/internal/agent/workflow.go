@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"find-restaurants/internal/apperrors"
 	"find-restaurants/internal/config"
@@ -46,18 +48,29 @@ func NewWorkflow(llmClient LLMClient, searchClient SearchClient, cfg config.Work
 }
 
 func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodResponse, error) {
+	start := time.Now()
+	log.Printf("workflow started")
+
 	request, err := normalizeRequest(raw)
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
 
+	log.Printf("workflow parse intent started")
 	intent, err := w.parseIntent(ctx, request)
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
+	log.Printf(
+		"workflow parse intent complete food_query=%q explicit_restrictions=%d duration=%s",
+		intent.FoodQuery,
+		len(intent.DietaryRestrictions),
+		time.Since(start).Round(time.Millisecond),
+	)
 
 	location := resolveLocation(request, intent)
 	if location == "" {
+		log.Printf("workflow needs input missing=location duration=%s", time.Since(start).Round(time.Millisecond))
 		question := "What location should I search near?"
 		if intent.FollowUpQuestion != nil && strings.TrimSpace(*intent.FollowUpQuestion) != "" {
 			question = strings.TrimSpace(*intent.FollowUpQuestion)
@@ -71,6 +84,7 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 		}, nil
 	}
 
+	log.Printf("workflow exa discovery started food_query=%q location=%q", intent.FoodQuery, location)
 	discovery, err := w.search.SearchRestaurantCandidates(ctx, exa.RestaurantSearchRequest{
 		FoodQuery:           intent.FoodQuery,
 		Location:            location,
@@ -79,13 +93,17 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
+	log.Printf("workflow exa discovery complete raw_results=%d query=%q duration=%s", len(discovery.Results), discovery.Query, time.Since(start).Round(time.Millisecond))
 
+	log.Printf("workflow candidate extraction started")
 	candidates, err := w.extractCandidates(ctx, intent, location, discovery)
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
 	candidates = limitCandidates(candidates, w.config.MaxCandidates)
+	log.Printf("workflow candidate extraction complete candidates=%d names=%q duration=%s", len(candidates), candidateNames(candidates), time.Since(start).Round(time.Millisecond))
 
+	log.Printf("workflow menu research started candidates=%d concurrency=%d", len(candidates), w.config.ResearchConcurrency)
 	restaurants, warnings := w.researchCandidates(ctx, candidates, intent, location)
 	restaurants = filterSupportedRestaurants(dedupeRestaurants(restaurants))
 	items := dedupeFoodItems(flattenFoodItems(restaurants))
@@ -95,6 +113,7 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 	if len(items) == 0 {
 		warnings = append(warnings, "no_matching_menu_items_found")
 	}
+	log.Printf("workflow complete items=%d warnings=%d duration=%s", len(items), len(warnings), time.Since(start).Round(time.Millisecond))
 
 	return FindFoodResponse{
 		Status:           "complete",
@@ -173,13 +192,17 @@ func (w *Workflow) researchCandidates(ctx context.Context, candidates []Candidat
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			start := time.Now()
+			log.Printf("workflow candidate research started candidate=%q", candidate.Name)
 			result, err := w.researchCandidate(ctx, candidate, intent, location)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				log.Printf("workflow candidate research failed candidate=%q duration=%s error=%v", candidate.Name, time.Since(start).Round(time.Millisecond), err)
 				warnings = append(warnings, "research_failed:"+candidate.Name)
 				return
 			}
+			log.Printf("workflow candidate research complete candidate=%q matched_items=%d confidence=%s duration=%s", candidate.Name, len(result.MenuItems), result.Confidence, time.Since(start).Round(time.Millisecond))
 			results[index] = result
 		}(index, candidate)
 	}
@@ -511,4 +534,12 @@ func max(a int, b int) int {
 		return a
 	}
 	return b
+}
+
+func candidateNames(candidates []Candidate) []string {
+	names := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		names = append(names, candidate.Name)
+	}
+	return names
 }

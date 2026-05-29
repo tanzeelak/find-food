@@ -32,6 +32,7 @@ type WorkflowConfig struct {
 
 func Load() Config {
 	LoadDotEnv(".env")
+	LoadDotEnv("../.env")
 
 	provider := getenv("LLM_PROVIDER", "")
 	if provider == "" {

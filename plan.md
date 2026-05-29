@@ -71,9 +71,9 @@ The system should return specific menu items that match the dietary restrictions
 ### MVP Components
 
 ```txt
-cmd/api/
+golang/cmd/api/
   main.go
-internal/
+golang/internal/
   agent/
     workflow.go
     prompts.go
@@ -86,7 +86,7 @@ internal/
     client.go
 ```
 
-Phase 1 is implemented in Go. The frontend can remain separate and call the Go API over HTTP.
+Phase 1 is implemented in Go under `golang/`. The frontend can remain separate and call the Go API over HTTP.
 
 ### MVP Response Shape
 

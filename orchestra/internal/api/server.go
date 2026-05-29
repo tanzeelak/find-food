@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"find-restaurants/internal/agent"
 	"find-restaurants/internal/apperrors"
@@ -46,20 +48,26 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFindFood(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	log.Printf("find-food request started remote=%s", r.RemoteAddr)
+
 	var request agent.FindFoodRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
+		log.Printf("find-food request rejected duration=%s error=invalid_json", time.Since(start).Round(time.Millisecond))
 		writeError(w, apperrors.New(http.StatusBadRequest, "invalid_json", "Request body must be valid JSON matching the find-food request shape."))
 		return
 	}
 
 	response, err := s.workflow.Run(r.Context(), request)
 	if err != nil {
+		log.Printf("find-food request failed duration=%s error=%v", time.Since(start).Round(time.Millisecond), err)
 		writeError(w, err)
 		return
 	}
 
+	log.Printf("find-food request complete duration=%s status=%s items=%d", time.Since(start).Round(time.Millisecond), response.Status, len(response.Items))
 	writeJSON(w, http.StatusOK, response)
 }
 
