@@ -33,6 +33,79 @@ EXA_API_KEY=your_exa_api_key
 MEM0_API_KEY=your_mem0_api_key
 ```
 
+## Phase 1 Go backend
+
+The Codebuff-free MVP backend lives under `cmd/api` and `internal/*`.
+
+Run tests:
+
+```bash
+go test ./...
+```
+
+Start the API:
+
+```bash
+go run ./cmd/api
+```
+
+The server starts on `http://127.0.0.1:3000` by default.
+
+Health check:
+
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+Find food request:
+
+```bash
+curl -X POST http://127.0.0.1:3000/api/find-food \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "message": "I want gluten-free fish tacos near me",
+    "location": "Mission District SF",
+    "dietaryRestrictions": ["gluten-free"]
+  }'
+```
+
+Successful responses are item-centric. The backend may search candidate restaurants internally, but it returns individual menu items that match the dietary restrictions:
+
+```json
+{
+  "status": "complete",
+  "items": [
+    {
+      "name": "Fish Tacos (Gluten Free)",
+      "restaurantName": "Lolo",
+      "restaurantSource": "new_find",
+      "whyItFits": "Explicitly labeled gluten-free fish tacos",
+      "caveats": ["Cross-contamination possible"],
+      "dietaryAccommodations": ["Gluten-free items marked on menu"],
+      "menuUrl": "https://example.com/menu",
+      "sourceUrls": ["https://example.com/menu"],
+      "confidence": "high"
+    }
+  ],
+  "followUpQuestion": null
+}
+```
+
+Required environment variables for the real workflow:
+
+```bash
+EXA_API_KEY=your_exa_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+```
+
+Optional model settings:
+
+```bash
+LLM_PROVIDER=openrouter
+LLM_MODEL=anthropic/claude-4-sonnet-20250522
+PORT=3000
+```
+
 ### Getting a Mem0 API key
 
 The easiest path is the Mem0 CLI's agent-mode signup:
@@ -56,7 +129,7 @@ When prompted, provide:
 - **Location** — e.g. `"Mission District SF"` or `"Downtown Portland"`
 - **Dietary restrictions** — e.g. `["gluten-free", "dairy-free", "pescatarian"]`
 
-Each matching restaurant is returned with specific menu items, a vibe summary, and a link to its menu.
+Each result should identify a specific menu item that matches your dietary restrictions, plus the restaurant, evidence, caveats, and menu/source links.
 
 ### Skip the prompts with Mem0
 
@@ -85,6 +158,7 @@ The agent **never** persists transient context ("I'm at X right now", your curre
 
 ## Planned improvements
 - Auto switch models. Switch to Grok 4.3
+- Rotate API keys regularly
 - Let users set dietary restrictions interactively
 - Investigate result consistency across runs
 - Make location finder more context specific
