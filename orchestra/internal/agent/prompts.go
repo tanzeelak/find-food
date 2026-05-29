@@ -5,31 +5,60 @@ import (
 	"fmt"
 )
 
-const IntentSystemPrompt = `You parse natural-language restaurant requests into strict JSON.
+const CoreAgentSystemPrompt = `You are the core food agent for a dietary menu-item search product.
+Decide whether to ask the user a follow-up question or call the backend find_menu_items tool.
 Return only a JSON object. Do not include markdown.`
 
-func BuildIntentUserPrompt(request FindFoodRequest) string {
-	payload, _ := json.MarshalIndent(request, "", "  ")
-	return fmt.Sprintf(`Parse this request for a restaurant-finding backend.
+func BuildCoreAgentUserPrompt(request FindFoodRequest, conversation ConversationContext) string {
+	requestPayload, _ := json.MarshalIndent(request, "", "  ")
+	conversationPayload, _ := json.MarshalIndent(conversation, "", "  ")
+	return fmt.Sprintf(`Handle this user request for a backend that finds individual menu items matching dietary restrictions.
 
-Request JSON:
+Current request JSON:
 %s
+
+Conversation context JSON:
+%s
+
+Available backend tools:
+- find_menu_items: searches for individual restaurant menu items that match a food query, location, and dietary restrictions.
 
 Return this JSON shape:
 {
-  "foodQuery": "specific food, cuisine, meal, or craving",
-  "locationIntent": "explicit|near_me|unspecified",
-  "location": "explicit location if present, otherwise empty string",
-  "dietaryRestrictions": ["restriction from prompt only"],
-  "preferences": ["other stable preferences from prompt"],
-  "missingFields": ["foodQuery" or "location" only when truly missing"],
-  "followUpQuestion": "short question if needed, otherwise null"
+  "action": "ask_followup|call_find_menu_items",
+  "followUpQuestion": "one concise natural question when action is ask_followup, otherwise empty string",
+  "missingFields": ["foodQuery", "location", "dietaryRestrictions"],
+  "knownFields": {
+    "foodQuery": "known food/dish/cuisine/craving or empty string",
+    "location": "known explicit location or empty string",
+    "locationIntent": "explicit|near_me|unspecified",
+    "dietaryRestrictions": ["known restrictions only"],
+    "preferences": ["other useful preferences"]
+  },
+  "toolRequest": {
+    "toolName": "find_menu_items",
+    "foodQuery": "complete food/dish/cuisine/craving",
+    "location": "complete search location",
+    "locationIntent": "explicit|near_me|unspecified",
+    "dietaryRestrictions": ["complete restrictions"],
+    "preferences": ["other useful preferences"]
+  }
 }
 
 Rules:
-- Treat "near me" as locationIntent "near_me" and location empty unless the request has a concrete place.
-- Do not infer dietary restrictions unless they are explicitly in the request.
-- A broad query like "dinner" or "something good" is acceptable as a foodQuery.`, payload)
+- Treat current request.message as the user's latest turn.
+- Use conversation context to preserve fields collected in earlier turns.
+- If the latest message answers a previous follow-up question, merge that answer with knownFields from conversation context.
+- The user can override earlier known fields in the latest message.
+- Use action "call_find_menu_items" only when foodQuery, location, and dietaryRestrictions are all known.
+- Use action "ask_followup" when anything needed is missing.
+- Treat "near me" as locationIntent "near_me"; it is not a complete location unless request.location or clientLocation gives a concrete place.
+- Do not infer dietary restrictions. Only use restrictions from the user or request fields.
+- A broad query like "dinner", "something spicy", or "good breakfast" is acceptable as foodQuery.
+- If the user says something vague like "I want this", ask what food they mean plus any other missing fields.
+- Ask one compact question that covers all missing fields.
+- When action is "ask_followup", fill knownFields and leave incomplete toolRequest fields empty.
+- When action is "call_find_menu_items", toolRequest.toolName must be "find_menu_items", missingFields must be empty, and toolRequest must be complete.`, requestPayload, conversationPayload)
 }
 
 const CandidateExtractionSystemPrompt = `You extract restaurant candidates from search results for a food search product.

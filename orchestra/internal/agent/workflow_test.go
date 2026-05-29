@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"find-restaurants/internal/config"
@@ -26,6 +27,69 @@ func TestWorkflowNeedsLocation(t *testing.T) {
 	}
 	if response.FollowUpQuestion == nil {
 		t.Fatal("expected follow-up question")
+	}
+	if response.ConversationID == "" {
+		t.Fatal("expected conversation id")
+	}
+}
+
+func TestWorkflowCoreAgentHandlesVagueInput(t *testing.T) {
+	workflow := testWorkflow()
+
+	response, err := workflow.Run(context.Background(), FindFoodRequest{
+		Message: "I want this",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if response.Status != "needs_input" {
+		t.Fatalf("expected needs_input, got %s", response.Status)
+	}
+	if response.FollowUpQuestion == nil || *response.FollowUpQuestion == "" {
+		t.Fatal("expected follow-up question")
+	}
+	if response.ConversationID == "" {
+		t.Fatal("expected conversation id")
+	}
+	if len(response.Warnings) != 3 {
+		t.Fatalf("expected three missing-field warnings, got %#v", response.Warnings)
+	}
+}
+
+func TestWorkflowConversationContinuesAfterFollowUp(t *testing.T) {
+	workflow := testWorkflow()
+
+	first, err := workflow.Run(context.Background(), FindFoodRequest{
+		Message:             "I want gluten-free fish tacos near me",
+		DietaryRestrictions: []string{"gluten-free"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Status != "needs_input" {
+		t.Fatalf("expected first response needs_input, got %s", first.Status)
+	}
+	if first.ConversationID == "" {
+		t.Fatal("expected conversation id")
+	}
+
+	second, err := workflow.Run(context.Background(), FindFoodRequest{
+		ConversationID: first.ConversationID,
+		Message:        "Mission District SF",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if second.Status != "complete" {
+		t.Fatalf("expected complete after follow-up, got %s", second.Status)
+	}
+	if second.ConversationID != first.ConversationID {
+		t.Fatalf("expected same conversation id, got %s", second.ConversationID)
+	}
+	if second.Metadata == nil || second.Metadata.FoodQuery != "fish tacos" || second.Metadata.Location != "Mission District SF" {
+		t.Fatalf("expected merged conversation metadata, got %#v", second.Metadata)
 	}
 }
 
@@ -112,6 +176,17 @@ func TestWorkflowFiltersUnsupportedDietaryCaveats(t *testing.T) {
 	}
 }
 
+func TestChooseFollowUpQuestionCoversMissingFields(t *testing.T) {
+	question := chooseFollowUpQuestion(AgentDecision{
+		FollowUpQuestion: "What food are you looking for, and where should I search?",
+	}, []string{"foodQuery", "location", "dietaryRestrictions"})
+
+	expected := "What food are you looking for, where should I search, and what dietary restrictions should I apply?"
+	if question != expected {
+		t.Fatalf("expected guardrail question %q, got %q", expected, question)
+	}
+}
+
 func testWorkflow() *Workflow {
 	return NewWorkflow(fakeLLM{}, fakeSearch{}, config.WorkflowConfig{
 		MaxCandidates:       3,
@@ -125,11 +200,44 @@ type fakeLLM struct{}
 func (fakeLLM) ChatJSON(ctx context.Context, req llm.ChatJSONRequest, out any) error {
 	var payload any
 	switch req.Operation {
-	case "parse_intent":
-		payload = Intent{
-			FoodQuery:           "fish tacos",
-			LocationIntent:      "near_me",
-			DietaryRestrictions: []string{"gluten-free"},
+	case "core_food_agent":
+		if strings.Contains(req.User, `"message": "I want this"`) {
+			payload = AgentDecision{
+				Action:           "ask_followup",
+				FollowUpQuestion: "What food should I look for, where should I search, and what dietary restrictions should I apply?",
+				MissingFields:    []string{"foodQuery", "location", "dietaryRestrictions"},
+			}
+		} else if strings.Contains(req.User, `"message": "Mission District SF"`) && strings.Contains(req.User, `"foodQuery": "fish tacos"`) {
+			payload = AgentDecision{
+				Action: "call_find_menu_items",
+				ToolRequest: FindMenuItemsToolRequest{
+					FoodQuery:           "fish tacos",
+					Location:            "Mission District SF",
+					LocationIntent:      "explicit",
+					DietaryRestrictions: []string{"gluten-free"},
+				},
+			}
+		} else if strings.Contains(req.User, `"location": "Mission District SF"`) {
+			payload = AgentDecision{
+				Action: "call_find_menu_items",
+				ToolRequest: FindMenuItemsToolRequest{
+					FoodQuery:           "fish tacos",
+					Location:            "Mission District SF",
+					LocationIntent:      "explicit",
+					DietaryRestrictions: []string{"gluten-free"},
+				},
+			}
+		} else {
+			payload = AgentDecision{
+				Action:           "ask_followup",
+				FollowUpQuestion: "Where should I search?",
+				MissingFields:    []string{"location"},
+				KnownFields: AgentKnownFields{
+					FoodQuery:           "fish tacos",
+					LocationIntent:      "near_me",
+					DietaryRestrictions: []string{"gluten-free"},
+				},
+			}
 		}
 	case "extract_candidates":
 		payload = struct {

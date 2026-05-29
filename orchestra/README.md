@@ -2,7 +2,7 @@
 
 This is the current Codebuff-free runtime for Find Food.
 
-It exposes a local HTTP API that accepts agent-like natural language requests, uses Exa for search, uses an OpenRouter/OpenAI-compatible LLM for structured extraction, and returns individual matching menu items.
+It exposes a local HTTP API backed by a core food agent. The agent manages conversation state, decides whether to ask a follow-up or call the `find_menu_items` backend tool, uses Exa for search, uses an OpenRouter/OpenAI-compatible LLM for structured extraction, and returns individual matching menu items.
 
 ## Run
 
@@ -18,6 +18,17 @@ Health check:
 curl http://127.0.0.1:3000/health
 ```
 
+Chat client:
+
+With the API server running, start a terminal chat session in another terminal:
+
+```bash
+go run ./cmd/chat
+```
+
+The chat client keeps `conversationId` for you. Type `reset` to start over and
+`quit` to exit.
+
 Find food:
 
 ```bash
@@ -29,6 +40,29 @@ curl -sS -X POST http://127.0.0.1:3000/api/find-food \
     "dietaryRestrictions": ["gluten-free"]
   }'
 ```
+
+Agent conversation:
+
+```bash
+curl -sS -X POST http://127.0.0.1:3000/api/find-food \
+  -H 'Content-Type: text/plain' \
+  --data 'I want gluten-free fish tacos near me'
+```
+
+If the response asks a follow-up, send the returned `conversationId` back with
+the next turn:
+
+```bash
+curl -sS -X POST http://127.0.0.1:3000/api/find-food \
+  -H 'Content-Type: text/plain' \
+  -H 'X-Conversation-ID: <conversationId>' \
+  --data 'Mission District SF'
+```
+
+You can also include `conversationId` in the JSON body instead of using the
+header.
+
+Responses are pretty-printed JSON by default so direct `curl` output is readable.
 
 ## Test
 

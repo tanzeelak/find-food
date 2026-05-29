@@ -8,9 +8,9 @@ Find Food helps identify specific menu items that match dietary restrictions. Th
 
 Current runtime:
 
-- `golang/` - active Go backend
+- `orchestra/` - active Go backend
 - HTTP API: `POST /api/find-food`
-- Uses Exa for search and OpenRouter-compatible LLM calls for structured extraction
+- Uses a core food agent for conversation/tool choice, Exa for search, and OpenRouter-compatible LLM calls for structured extraction
 - Returns individual matching menu items, not restaurant-only recommendations
 
 Legacy runtime:
@@ -21,9 +21,9 @@ Legacy runtime:
 ## Project Layout
 
 ```txt
-golang/
+orchestra/
   cmd/api/              current API entrypoint
-  internal/agent/       deterministic workflow + prompts + response types
+  internal/agent/       core agent, backend tools, prompts, and response types
   internal/api/         HTTP routes
   internal/exa/         Exa search client
   internal/llm/         OpenRouter/OpenAI-compatible LLM client
@@ -42,7 +42,7 @@ codebuff/architecture.md original Codebuff architecture notes
 From the repo root:
 
 ```bash
-cd golang
+cd orchestra
 GOCACHE="$PWD/.gocache" go run ./cmd/api
 ```
 
@@ -64,7 +64,7 @@ curl -sS -X POST http://127.0.0.1:3000/api/find-food \
   }'
 ```
 
-The server logs progress while a request is running: intent parsing, Exa discovery, candidate extraction, and per-restaurant menu research.
+The server logs progress while a request is running: core agent decision, `find_menu_items` tool execution, Exa discovery, candidate extraction, and per-restaurant menu research.
 
 ## Response Shape
 
@@ -92,7 +92,7 @@ Successful responses are item-centric:
 
 ## Environment
 
-The Go backend reads `.env` from `golang/.env` or the repo-root `.env`.
+The Go backend reads `.env` from `orchestra/.env` or the repo-root `.env`.
 
 Required for real requests:
 
@@ -112,7 +112,7 @@ PORT=3000
 ## Test
 
 ```bash
-cd golang
+cd orchestra
 GOCACHE="$PWD/.gocache" go test ./...
 GOCACHE="$PWD/.gocache" go vet ./...
 ```

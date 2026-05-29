@@ -24,9 +24,10 @@ type SearchClient interface {
 }
 
 type Workflow struct {
-	llm    LLMClient
-	search SearchClient
-	config config.WorkflowConfig
+	llm           LLMClient
+	search        SearchClient
+	config        config.WorkflowConfig
+	conversations *conversationStore
 }
 
 func NewWorkflow(llmClient LLMClient, searchClient SearchClient, cfg config.WorkflowConfig) *Workflow {
@@ -41,9 +42,10 @@ func NewWorkflow(llmClient LLMClient, searchClient SearchClient, cfg config.Work
 	}
 
 	return &Workflow{
-		llm:    llmClient,
-		search: searchClient,
-		config: cfg,
+		llm:           llmClient,
+		search:        searchClient,
+		config:        cfg,
+		conversations: newConversationStore(30 * time.Minute),
 	}
 }
 
@@ -55,35 +57,53 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
+	conversationID, conversation := w.loadConversation(request)
+	request.ConversationID = conversationID
 
-	log.Printf("workflow parse intent started")
-	intent, err := w.parseIntent(ctx, request)
+	log.Printf("workflow core agent started")
+	decision, err := w.runCoreAgent(ctx, request, conversation)
 	if err != nil {
 		return FindFoodResponse{}, err
 	}
-	log.Printf(
-		"workflow parse intent complete food_query=%q explicit_restrictions=%d duration=%s",
-		intent.FoodQuery,
-		len(intent.DietaryRestrictions),
-		time.Since(start).Round(time.Millisecond),
-	)
 
+	log.Printf("workflow core agent complete action=%s missing=%q duration=%s", decision.Action, decision.MissingFields, time.Since(start).Round(time.Millisecond))
+	intent := intentFromAgentDecision(request, conversation, decision)
 	location := resolveLocation(request, intent)
-	if location == "" {
-		log.Printf("workflow needs input missing=location duration=%s", time.Since(start).Round(time.Millisecond))
-		question := "What location should I search near?"
-		if intent.FollowUpQuestion != nil && strings.TrimSpace(*intent.FollowUpQuestion) != "" {
-			question = strings.TrimSpace(*intent.FollowUpQuestion)
-		}
+	missingFields := validateSearchIntent(intent, location)
 
+	if decision.Action == "ask_followup" {
+		missingFields = normalizeMissingFields(append(decision.MissingFields, missingFields...))
+		question := chooseFollowUpQuestion(decision, missingFields)
+		w.saveNeedsInputConversation(conversation, request, decision, missingFields, question)
+		log.Printf("workflow needs input missing=%q duration=%s", missingFields, time.Since(start).Round(time.Millisecond))
 		return FindFoodResponse{
+			ConversationID:   conversationID,
 			Status:           "needs_input",
 			Items:            []FoodItemResult{},
 			FollowUpQuestion: &question,
-			Warnings:         []string{"location_required"},
+			Warnings:         missingWarnings(missingFields),
 		}, nil
 	}
 
+	if len(missingFields) > 0 {
+		question := chooseFollowUpQuestion(decision, missingFields)
+		w.saveNeedsInputConversation(conversation, request, decision, missingFields, question)
+		log.Printf("workflow core agent guardrail needs input missing=%q duration=%s", missingFields, time.Since(start).Round(time.Millisecond))
+
+		return FindFoodResponse{
+			ConversationID:   conversationID,
+			Status:           "needs_input",
+			Items:            []FoodItemResult{},
+			FollowUpQuestion: &question,
+			Warnings:         missingWarnings(missingFields),
+		}, nil
+	}
+
+	return w.runFindMenuItemsTool(ctx, start, conversationID, conversation, request, intent, location)
+}
+
+func (w *Workflow) runFindMenuItemsTool(ctx context.Context, start time.Time, conversationID string, conversation ConversationContext, request FindFoodRequest, intent Intent, location string) (FindFoodResponse, error) {
+	log.Printf("workflow tool find_menu_items started food_query=%q location=%q", intent.FoodQuery, location)
 	log.Printf("workflow exa discovery started food_query=%q location=%q", intent.FoodQuery, location)
 	discovery, err := w.search.SearchRestaurantCandidates(ctx, exa.RestaurantSearchRequest{
 		FoodQuery:           intent.FoodQuery,
@@ -114,8 +134,10 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 		warnings = append(warnings, "no_matching_menu_items_found")
 	}
 	log.Printf("workflow complete items=%d warnings=%d duration=%s", len(items), len(warnings), time.Since(start).Round(time.Millisecond))
+	w.saveCompleteConversation(conversation, request, intent)
 
 	return FindFoodResponse{
+		ConversationID:   conversationID,
 		Status:           "complete",
 		Items:            items,
 		FollowUpQuestion: nil,
@@ -130,25 +152,39 @@ func (w *Workflow) Run(ctx context.Context, raw FindFoodRequest) (FindFoodRespon
 	}, nil
 }
 
-func (w *Workflow) parseIntent(ctx context.Context, request FindFoodRequest) (Intent, error) {
-	var intent Intent
+func (w *Workflow) runCoreAgent(ctx context.Context, request FindFoodRequest, conversation ConversationContext) (AgentDecision, error) {
+	var decision AgentDecision
 	if err := w.llm.ChatJSON(ctx, llm.ChatJSONRequest{
-		Operation: "parse_intent",
-		System:    IntentSystemPrompt,
-		User:      BuildIntentUserPrompt(request),
-		MaxTokens: 600,
-	}, &intent); err != nil {
-		return Intent{}, err
+		Operation: "core_food_agent",
+		System:    CoreAgentSystemPrompt,
+		User:      BuildCoreAgentUserPrompt(request, conversation),
+		MaxTokens: 900,
+	}, &decision); err != nil {
+		return AgentDecision{}, err
 	}
 
-	intent.FoodQuery = firstNonEmpty(intent.FoodQuery, request.Message)
-	intent.Location = strings.TrimSpace(intent.Location)
-	intent.LocationIntent = firstNonEmpty(intent.LocationIntent, "unspecified")
-	intent.DietaryRestrictions = unique(append(request.DietaryRestrictions, intent.DietaryRestrictions...))
-	intent.Preferences = unique(intent.Preferences)
-	intent.MissingFields = unique(intent.MissingFields)
+	decision.Action = strings.ToLower(strings.TrimSpace(decision.Action))
+	if decision.Action != "call_find_menu_items" && decision.Action != "ask_followup" {
+		decision.Action = "ask_followup"
+	}
+	decision.FollowUpQuestion = strings.TrimSpace(decision.FollowUpQuestion)
+	decision.MissingFields = normalizeMissingFields(decision.MissingFields)
+	decision.KnownFields.FoodQuery = strings.TrimSpace(decision.KnownFields.FoodQuery)
+	decision.KnownFields.Location = strings.TrimSpace(decision.KnownFields.Location)
+	decision.KnownFields.LocationIntent = normalizeLocationIntent(decision.KnownFields.LocationIntent)
+	decision.KnownFields.DietaryRestrictions = unique(decision.KnownFields.DietaryRestrictions)
+	decision.KnownFields.Preferences = unique(decision.KnownFields.Preferences)
+	decision.ToolRequest.FoodQuery = strings.TrimSpace(decision.ToolRequest.FoodQuery)
+	decision.ToolRequest.ToolName = strings.TrimSpace(decision.ToolRequest.ToolName)
+	if decision.Action == "call_find_menu_items" {
+		decision.ToolRequest.ToolName = "find_menu_items"
+	}
+	decision.ToolRequest.Location = strings.TrimSpace(decision.ToolRequest.Location)
+	decision.ToolRequest.LocationIntent = normalizeLocationIntent(decision.ToolRequest.LocationIntent)
+	decision.ToolRequest.DietaryRestrictions = unique(decision.ToolRequest.DietaryRestrictions)
+	decision.ToolRequest.Preferences = unique(decision.ToolRequest.Preferences)
 
-	return intent, nil
+	return decision, nil
 }
 
 func (w *Workflow) extractCandidates(ctx context.Context, intent Intent, location string, discovery exa.SearchResponse) ([]Candidate, error) {
@@ -265,6 +301,7 @@ func (w *Workflow) researchCandidate(ctx context.Context, candidate Candidate, i
 }
 
 func normalizeRequest(raw FindFoodRequest) (FindFoodRequest, error) {
+	raw.ConversationID = strings.TrimSpace(raw.ConversationID)
 	raw.Message = strings.TrimSpace(firstNonEmpty(raw.Message, raw.Prompt))
 	raw.Location = strings.TrimSpace(raw.Location)
 	raw.DietaryRestrictions = unique(raw.DietaryRestrictions)
@@ -272,6 +309,45 @@ func normalizeRequest(raw FindFoodRequest) (FindFoodRequest, error) {
 		return FindFoodRequest{}, apperrors.New(400, "bad_request", "Request body must include a non-empty message.")
 	}
 	return raw, nil
+}
+
+func (w *Workflow) loadConversation(request FindFoodRequest) (string, ConversationContext) {
+	id := strings.TrimSpace(request.ConversationID)
+	if id == "" {
+		id = newConversationID()
+	}
+
+	conversation, ok := w.conversations.get(id)
+	if !ok {
+		conversation = ConversationContext{ConversationID: id}
+	}
+	conversation.ConversationID = id
+	return id, conversation
+}
+
+func (w *Workflow) saveNeedsInputConversation(conversation ConversationContext, request FindFoodRequest, decision AgentDecision, missingFields []string, question string) {
+	conversation.Messages = appendConversationMessage(conversation.Messages, "user", request.Message)
+	conversation.Messages = appendConversationMessage(conversation.Messages, "assistant", question)
+	conversation.Messages = trimConversationMessages(conversation.Messages, 12)
+	conversation.KnownFields = mergeKnownFields(
+		conversation.KnownFields,
+		knownFieldsFromRequest(request),
+		decision.KnownFields,
+		knownFieldsFromToolRequest(decision.ToolRequest),
+	)
+	conversation.MissingFields = normalizeMissingFields(missingFields)
+	conversation.LastFollowUpQuestion = question
+	w.conversations.save(conversation)
+}
+
+func (w *Workflow) saveCompleteConversation(conversation ConversationContext, request FindFoodRequest, intent Intent) {
+	conversation.Messages = appendConversationMessage(conversation.Messages, "user", request.Message)
+	conversation.Messages = appendConversationMessage(conversation.Messages, "assistant", "Search completed.")
+	conversation.Messages = trimConversationMessages(conversation.Messages, 12)
+	conversation.KnownFields = mergeKnownFields(conversation.KnownFields, knownFieldsFromRequest(request), knownFieldsFromIntent(intent))
+	conversation.MissingFields = nil
+	conversation.LastFollowUpQuestion = ""
+	w.conversations.save(conversation)
 }
 
 func resolveLocation(request FindFoodRequest, intent Intent) string {
@@ -288,6 +364,201 @@ func resolveLocation(request FindFoodRequest, intent Intent) string {
 		return strings.TrimSpace(floatString(*request.ClientLocation.Latitude) + "," + floatString(*request.ClientLocation.Longitude))
 	}
 	return ""
+}
+
+func intentFromAgentDecision(request FindFoodRequest, conversation ConversationContext, decision AgentDecision) Intent {
+	return Intent{
+		FoodQuery:           firstNonEmpty(decision.ToolRequest.FoodQuery, decision.KnownFields.FoodQuery, conversation.KnownFields.FoodQuery),
+		LocationIntent:      normalizeLocationIntent(firstNonEmpty(decision.ToolRequest.LocationIntent, decision.KnownFields.LocationIntent, conversation.KnownFields.LocationIntent)),
+		Location:            firstNonEmpty(request.Location, decision.ToolRequest.Location, decision.KnownFields.Location, conversation.KnownFields.Location),
+		DietaryRestrictions: dietaryRestrictionsFromAgent(request, conversation, decision),
+		Preferences:         unique(append(append(conversation.KnownFields.Preferences, decision.KnownFields.Preferences...), decision.ToolRequest.Preferences...)),
+	}
+}
+
+func dietaryRestrictionsFromAgent(request FindFoodRequest, conversation ConversationContext, decision AgentDecision) []string {
+	switch {
+	case len(decision.ToolRequest.DietaryRestrictions) > 0:
+		return unique(decision.ToolRequest.DietaryRestrictions)
+	case len(decision.KnownFields.DietaryRestrictions) > 0:
+		return unique(decision.KnownFields.DietaryRestrictions)
+	case len(request.DietaryRestrictions) > 0:
+		return unique(request.DietaryRestrictions)
+	default:
+		return unique(conversation.KnownFields.DietaryRestrictions)
+	}
+}
+
+func knownFieldsFromRequest(request FindFoodRequest) AgentKnownFields {
+	locationIntent := ""
+	if request.ClientLocation != nil {
+		locationIntent = "near_me"
+	}
+	if strings.TrimSpace(request.Location) != "" {
+		locationIntent = "explicit"
+	}
+
+	return AgentKnownFields{
+		Location:            resolveLocation(request, Intent{}),
+		LocationIntent:      locationIntent,
+		DietaryRestrictions: request.DietaryRestrictions,
+	}
+}
+
+func knownFieldsFromToolRequest(request FindMenuItemsToolRequest) AgentKnownFields {
+	return AgentKnownFields{
+		FoodQuery:           request.FoodQuery,
+		Location:            request.Location,
+		LocationIntent:      request.LocationIntent,
+		DietaryRestrictions: request.DietaryRestrictions,
+		Preferences:         request.Preferences,
+	}
+}
+
+func knownFieldsFromIntent(intent Intent) AgentKnownFields {
+	return AgentKnownFields{
+		FoodQuery:           intent.FoodQuery,
+		Location:            intent.Location,
+		LocationIntent:      intent.LocationIntent,
+		DietaryRestrictions: intent.DietaryRestrictions,
+		Preferences:         intent.Preferences,
+	}
+}
+
+func mergeKnownFields(values ...AgentKnownFields) AgentKnownFields {
+	var merged AgentKnownFields
+	for _, value := range values {
+		if strings.TrimSpace(value.FoodQuery) != "" {
+			merged.FoodQuery = strings.TrimSpace(value.FoodQuery)
+		}
+		if strings.TrimSpace(value.Location) != "" {
+			merged.Location = strings.TrimSpace(value.Location)
+		}
+		if strings.TrimSpace(value.LocationIntent) != "" && normalizeLocationIntent(value.LocationIntent) != "unspecified" {
+			merged.LocationIntent = normalizeLocationIntent(value.LocationIntent)
+		}
+		if len(value.DietaryRestrictions) > 0 {
+			merged.DietaryRestrictions = unique(value.DietaryRestrictions)
+		}
+		merged.Preferences = unique(append(merged.Preferences, value.Preferences...))
+	}
+	merged.LocationIntent = normalizeLocationIntent(merged.LocationIntent)
+	return merged
+}
+
+func validateSearchIntent(intent Intent, location string) []string {
+	missing := make([]string, 0, 3)
+	if strings.TrimSpace(intent.FoodQuery) == "" {
+		missing = append(missing, "foodQuery")
+	}
+	if strings.TrimSpace(location) == "" {
+		missing = append(missing, "location")
+	}
+	if len(intent.DietaryRestrictions) == 0 {
+		missing = append(missing, "dietaryRestrictions")
+	}
+
+	return normalizeMissingFields(missing)
+}
+
+func normalizeMissingFields(missing []string) []string {
+	normalized := make([]string, 0, len(missing))
+	for _, field := range unique(missing) {
+		key := strings.ToLower(strings.TrimSpace(field))
+		key = strings.NewReplacer(" ", "", "_", "", "-", "").Replace(key)
+		switch key {
+		case "foodquery", "food", "query", "craving", "dish", "item":
+			normalized = append(normalized, "foodQuery")
+		case "location", "place", "near", "nearme":
+			normalized = append(normalized, "location")
+		case "dietaryrestrictions", "restrictions", "allergies":
+			normalized = append(normalized, "dietaryRestrictions")
+		}
+	}
+
+	return unique(normalized)
+}
+
+func buildFollowUpQuestion(missing []string) string {
+	has := map[string]bool{}
+	for _, field := range missing {
+		has[field] = true
+	}
+
+	switch {
+	case has["foodQuery"] && has["location"] && has["dietaryRestrictions"]:
+		return "What food are you looking for, where should I search, and what dietary restrictions should I apply?"
+	case has["foodQuery"] && has["location"]:
+		return "What food are you looking for, and where should I search?"
+	case has["foodQuery"] && has["dietaryRestrictions"]:
+		return "What food are you looking for, and what dietary restrictions should I apply?"
+	case has["location"] && has["dietaryRestrictions"]:
+		return "Where should I search, and what dietary restrictions should I apply?"
+	case has["foodQuery"]:
+		return "What food or dish are you looking for?"
+	case has["location"]:
+		return "Where should I search?"
+	case has["dietaryRestrictions"]:
+		return "What dietary restrictions should I apply?"
+	default:
+		return "What else should I know before searching?"
+	}
+}
+
+func chooseFollowUpQuestion(decision AgentDecision, missing []string) string {
+	question := strings.TrimSpace(decision.FollowUpQuestion)
+	if question != "" && followUpQuestionCoversMissing(question, missing) {
+		return question
+	}
+	return buildFollowUpQuestion(missing)
+}
+
+func followUpQuestionCoversMissing(question string, missing []string) bool {
+	lower := strings.ToLower(question)
+	for _, field := range normalizeMissingFields(missing) {
+		switch field {
+		case "foodQuery":
+			if !strings.Contains(lower, "food") && !strings.Contains(lower, "dish") && !strings.Contains(lower, "craving") && !strings.Contains(lower, "cuisine") {
+				return false
+			}
+		case "location":
+			if !strings.Contains(lower, "where") && !strings.Contains(lower, "location") && !strings.Contains(lower, "near") && !strings.Contains(lower, "search") {
+				return false
+			}
+		case "dietaryRestrictions":
+			if !strings.Contains(lower, "diet") && !strings.Contains(lower, "restriction") && !strings.Contains(lower, "allerg") && !strings.Contains(lower, "avoid") {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func missingWarnings(missing []string) []string {
+	normalized := normalizeMissingFields(missing)
+	warnings := make([]string, 0, len(normalized))
+	for _, field := range normalized {
+		warnings = append(warnings, "missing_"+field)
+	}
+	return warnings
+}
+
+func appendConversationMessage(messages []ConversationMessage, role string, content string) []ConversationMessage {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return messages
+	}
+	return append(messages, ConversationMessage{
+		Role:    role,
+		Content: content,
+	})
+}
+
+func trimConversationMessages(messages []ConversationMessage, limit int) []ConversationMessage {
+	if limit <= 0 || len(messages) <= limit {
+		return messages
+	}
+	return messages[len(messages)-limit:]
 }
 
 func promptResults(results []exa.Result, maxText int) []SearchResultForPrompt {
@@ -488,6 +759,18 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func normalizeLocationIntent(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	switch normalized {
+	case "explicit", "near_me":
+		return normalized
+	default:
+		return "unspecified"
+	}
 }
 
 func normalizeConfidence(value string) string {

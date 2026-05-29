@@ -13,10 +13,11 @@ The product should still accept natural language, resolve missing context, searc
 ```txt
 Frontend
   -> Backend API
-      -> FindFoodWorkflow
-          -> intent parsing LLM call
+      -> CoreFoodAgent
+          -> ask follow-up or call find_menu_items
+          -> backend find_menu_items tool
           -> Exa restaurant discovery
-          -> menu fetch / extraction LLM calls
+          -> menu/source extraction LLM calls
           -> optional bounded agents for complex research
           -> Mem0 profile + restaurant memory
           -> OpenTelemetry / Arize tracing
@@ -71,9 +72,9 @@ The system should return specific menu items that match the dietary restrictions
 ### MVP Components
 
 ```txt
-golang/cmd/api/
+orchestra/cmd/api/
   main.go
-golang/internal/
+orchestra/internal/
   agent/
     workflow.go
     prompts.go
@@ -86,7 +87,7 @@ golang/internal/
     client.go
 ```
 
-Phase 1 is implemented in Go under `golang/`. The frontend can remain separate and call the Go API over HTTP.
+Phase 1 is implemented in Go under `orchestra/`. The frontend can remain separate and call the Go API over HTTP.
 
 ### MVP Response Shape
 
@@ -124,7 +125,7 @@ If the prompt is underspecified:
 ### MVP Non-Goals
 
 - No Mem0 yet.
-- No autonomous tool-using agent loop yet.
+- No open-ended autonomous tool loop beyond the bounded core food agent.
 - No memory writes.
 - No full observability beyond normal logs.
 - No Codebuff dependency.
@@ -134,8 +135,8 @@ If the prompt is underspecified:
 - A frontend or API client can submit one natural-language request.
 - Backend returns structured restaurant/menu-item JSON.
 - Exa is called by backend service code, not by Codebuff.
-- LLM calls are narrow and schema-validated.
-- Code path is deterministic enough to debug from logs.
+- Agent decisions and LLM extraction calls are narrow and schema-validated.
+- Tool execution path is deterministic enough to debug from logs.
 
 ## Phase 2: Replace Complex LLM Calls With Bounded Agents
 
@@ -212,7 +213,7 @@ FindFoodWorkflow
 
 ## Phase 3: Add Mem0
 
-Add memory after the deterministic workflow and research behavior are working. Memory should improve relevance without making the system unpredictable.
+Add memory after the bounded agent/tool workflow and research behavior are working. Memory should improve relevance without making the system unpredictable.
 
 ### Read Paths
 
@@ -339,7 +340,7 @@ The frontend can display the trace id in a debug area or attach it to bug report
 3. Port prompts from `.agents/find-food.ts` and `.agents/research-restaurant.ts`.
 4. Define request/response schemas.
 5. Implement Exa service.
-6. Implement intent parsing LLM call.
+6. Implement core food agent decision call.
 7. Implement menu extraction LLM call.
 8. Add simple frontend form and result view.
 9. Introduce `ResearchRestaurantAgent`.

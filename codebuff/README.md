@@ -2,7 +2,7 @@
 
 This folder contains the legacy Codebuff implementation of Find Food.
 
-It is kept for reference while the project migrates to the Go backend in `../golang`.
+It is kept for reference while the project migrates to the Go backend in `../orchestra`.
 
 ## Contents
 

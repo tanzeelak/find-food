@@ -1,6 +1,7 @@
 package agent
 
 type FindFoodRequest struct {
+	ConversationID      string          `json:"conversationId,omitempty"`
 	Message             string          `json:"message"`
 	Prompt              string          `json:"prompt,omitempty"`
 	Location            string          `json:"location,omitempty"`
@@ -15,6 +16,7 @@ type ClientLocation struct {
 }
 
 type FindFoodResponse struct {
+	ConversationID   string            `json:"conversationId,omitempty"`
 	Status           string            `json:"status"`
 	Items            []FoodItemResult  `json:"items"`
 	FollowUpQuestion *string           `json:"followUpQuestion"`
@@ -36,8 +38,31 @@ type Intent struct {
 	Location            string   `json:"location"`
 	DietaryRestrictions []string `json:"dietaryRestrictions"`
 	Preferences         []string `json:"preferences"`
-	MissingFields       []string `json:"missingFields"`
-	FollowUpQuestion    *string  `json:"followUpQuestion"`
+}
+
+type AgentDecision struct {
+	Action           string                   `json:"action"`
+	FollowUpQuestion string                   `json:"followUpQuestion"`
+	MissingFields    []string                 `json:"missingFields"`
+	KnownFields      AgentKnownFields         `json:"knownFields"`
+	ToolRequest      FindMenuItemsToolRequest `json:"toolRequest"`
+}
+
+type AgentKnownFields struct {
+	FoodQuery           string   `json:"foodQuery"`
+	Location            string   `json:"location"`
+	LocationIntent      string   `json:"locationIntent"`
+	DietaryRestrictions []string `json:"dietaryRestrictions"`
+	Preferences         []string `json:"preferences"`
+}
+
+type FindMenuItemsToolRequest struct {
+	ToolName            string   `json:"toolName,omitempty"`
+	FoodQuery           string   `json:"foodQuery"`
+	Location            string   `json:"location"`
+	LocationIntent      string   `json:"locationIntent"`
+	DietaryRestrictions []string `json:"dietaryRestrictions"`
+	Preferences         []string `json:"preferences"`
 }
 
 type Candidate struct {

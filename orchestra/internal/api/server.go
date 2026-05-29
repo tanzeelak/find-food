@@ -1,10 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"find-restaurants/internal/agent"
@@ -52,13 +55,12 @@ func (s *Server) handleFindFood(w http.ResponseWriter, r *http.Request) {
 	log.Printf("find-food request started remote=%s", r.RemoteAddr)
 
 	var request agent.FindFoodRequest
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil {
+	if err := decodeFindFoodRequest(w, r, &request); err != nil {
 		log.Printf("find-food request rejected duration=%s error=invalid_json", time.Since(start).Round(time.Millisecond))
-		writeError(w, apperrors.New(http.StatusBadRequest, "invalid_json", "Request body must be valid JSON matching the find-food request shape."))
+		writeError(w, apperrors.New(http.StatusBadRequest, "invalid_request", "Request body must be a non-empty plain text prompt, JSON string, or JSON object matching the find-food request shape."))
 		return
 	}
+	applyConversationID(r, &request)
 
 	response, err := s.workflow.Run(r.Context(), request)
 	if err != nil {
@@ -75,7 +77,7 @@ func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization,X-Conversation-ID")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -89,7 +91,54 @@ func cors(next http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	encoder := json.NewEncoder(w)
+	encoder.SetIndent("", "  ")
+	_ = encoder.Encode(payload)
+}
+
+func decodeFindFoodRequest(w http.ResponseWriter, r *http.Request, request *agent.FindFoodRequest) error {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		return errors.New("empty body")
+	}
+
+	contentType := strings.ToLower(r.Header.Get("Content-Type"))
+	if strings.HasPrefix(contentType, "text/plain") || (trimmed[0] != '{' && trimmed[0] != '"') {
+		request.Message = trimmed
+		return nil
+	}
+
+	if trimmed[0] == '"' {
+		var message string
+		if err := json.Unmarshal(body, &message); err != nil {
+			return err
+		}
+		request.Message = strings.TrimSpace(message)
+		return nil
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(request)
+}
+
+func applyConversationID(r *http.Request, request *agent.FindFoodRequest) {
+	if strings.TrimSpace(request.ConversationID) != "" {
+		request.ConversationID = strings.TrimSpace(request.ConversationID)
+		return
+	}
+	if value := strings.TrimSpace(r.Header.Get("X-Conversation-ID")); value != "" {
+		request.ConversationID = value
+		return
+	}
+	if value := strings.TrimSpace(r.URL.Query().Get("conversationId")); value != "" {
+		request.ConversationID = value
+	}
 }
 
 func writeError(w http.ResponseWriter, err error) {
