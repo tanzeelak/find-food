@@ -1,0 +1,6 @@
+- Fix `npm run cli` and `npm run dev` lock condition
+- Add a browser UI
+- Fix before sharing the URL publicly:
+    * Put auth in front of the endpoints, OR
+    * Add a thin backend proxy that holds the API keys, enforces identity, and
+      rate-limits; the browser should never call the agent API directly.
