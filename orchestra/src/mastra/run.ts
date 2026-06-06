@@ -1,4 +1,4 @@
-import { findFoodAgent } from "./agents/find-food.js";
+import { mastra } from "./index.js";
 
 export type TurnInput = {
   message: string;
@@ -7,7 +7,7 @@ export type TurnInput = {
 };
 
 export async function runFindFoodTurn({ message, resourceId, threadId }: TurnInput) {
-  return findFoodAgent.stream(message, {
+  return mastra.getAgent("findFood").stream(message, {
     memory: { resource: resourceId, thread: threadId }
   });
 }

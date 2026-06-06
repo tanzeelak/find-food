@@ -127,6 +127,48 @@ npm run dev    # mastra dev — local playground UI + auto-exposed agent endpoin
 
 Memory is stored in libsql files under `.mastra/` (gitignored).
 
+## Observability & metrics
+
+> **TODO (unresolved):** Metrics are still not showing up in Studio in the local setup, despite the libsql + DuckDB composite store and the wiring below. A test run via the API did persist traces and metrics (`/api/observability/metrics` returned data), so the remaining issue is likely Studio-side display (time range / refresh) or a CLI flush/lock interaction. Needs more debugging — paused for now.
+
+Agent runs emit traces and metrics (duration, token usage, cost) automatically. Traces go to the libsql store; metrics require an OLAP store, so the observability domain is routed to **DuckDB** (`@mastra/duckdb`) via a composite store. Both DBs live under `.mastra/` (gitignored), so the CLI, the HTTP server, and `mastra dev` all read/write the same data.
+
+View metrics and traces in the Studio dashboard:
+
+```bash
+npm run dev    # then open http://localhost:4111 -> Observability / Metrics
+```
+
+Metrics flush on a ~5s batch timer, so wait a few seconds after a run completes, and make sure the dashboard's time range includes "now".
+
+### Requirements
+
+- **Node 22+** is required (the `mastra` CLI uses APIs unavailable in Node 18). Run `nvm use` first.
+- **One process at a time:** DuckDB allows only a single read-write process per file. Do **not** run the CLI/server while `mastra dev` is up (and vice versa) — the second process fails with a DuckDB lock error.
+
+### Generating metrics from the CLI
+
+`mastra dev` already runs the agents, so the easiest path is to chat in the Studio playground. To drive runs from the CLI instead:
+
+1. Stop `mastra dev` (Ctrl-C) to release the DuckDB lock.
+2. Run the CLI under Node 22:
+   ```bash
+   nvm use
+   npm run cli
+   ```
+3. Chat a few turns. After the last response, **wait ~5s before typing `quit`** — the CLI exits without forcing a flush, so quitting immediately can drop the final turn's metrics.
+4. Restart `npm run dev` to view the new metrics in Studio.
+
+You can also fire a run over HTTP while `mastra dev` is up (it goes through the same server):
+
+```bash
+curl -s -X POST http://localhost:4111/api/agents/findFood/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":["Say hello in 3 words"]}'
+# then inspect:
+curl -s "http://localhost:4111/api/observability/metrics?perPage=10"
+```
+
 ## Scripts
 
 ```bash
@@ -140,4 +182,4 @@ npm run build       # tsc
 ## Notes
 
 - Search uses Exa's hosted MCP server (`https://mcp.exa.ai/mcp`), not a direct REST client.
-- Mem0 and tracing/observability (Arize) are intentionally deferred; the current build relies on Mastra's built-in memory.
+- Observability (traces + metrics) is built in via Mastra's storage exporter; metrics are persisted to DuckDB (see [Observability & metrics](#observability--metrics)). Mem0 is intentionally deferred; the current build relies on Mastra's built-in memory.

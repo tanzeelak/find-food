@@ -1,8 +1,13 @@
 import { Memory } from "@mastra/memory";
 import { LibSQLStore } from "@mastra/libsql";
-import { ensureFileUrlDir, getEnv } from "../env.js";
+import { resolveLibSQLConnection, resolveDataPath } from "../env.js";
 
-const memoryDbUrl = ensureFileUrlDir(getEnv("MEMORY_DB_URL", "file:./.mastra/find-food-memory.db"));
+const memoryConnection = resolveLibSQLConnection(
+  "MEMORY_DB_URL",
+  "MEMORY_DB_AUTH_TOKEN",
+  `file:${resolveDataPath(".mastra/find-food-memory.db")}`,
+  { urlKey: "MASTRA_DB_URL", tokenKey: "MASTRA_DB_AUTH_TOKEN" }
+);
 
 const userProfileTemplate = `# User Food Profile
 - Dietary restrictions: 
@@ -13,7 +18,7 @@ const userProfileTemplate = `# User Food Profile
 `;
 
 export const memory = new Memory({
-  storage: new LibSQLStore({ id: "find-food-memory", url: memoryDbUrl }),
+  storage: new LibSQLStore({ id: "find-food-memory", ...memoryConnection }),
   options: {
     lastMessages: 20,
     semanticRecall: false,
