@@ -68,9 +68,10 @@ Environment (read from `orchestra/.env` or the repo-root `.env`):
 EXA_API_KEY=...            # required — Exa MCP search
 OPENROUTER_API_KEY=...     # required — model provider
 
-# optional — shared cloud store (libsql/Turso). When unset, the default
-# store falls back to a local file under .mastra/ (see Storage & memory).
-MASTRA_DB_URL=libsql://<your-db>.turso.io
+# optional — shared cloud store (libsql/Turso). The auth token is a per-database
+# token (independent of `turso auth login`). When unset, the default store and
+# memory fall back to local files under .mastra/ (see Storage & memory > Turso).
+MASTRA_DB_URL=libsql://<db-name>-<org>.<region>.turso.io
 MASTRA_DB_AUTH_TOKEN=...
 
 # optional — Mastra platform (prod Studio). Set by `mastra` tooling; lets
@@ -145,7 +146,105 @@ Memory specifics:
 - **Conversation history** is kept per thread (last messages).
 - **User profile** is persistent working memory scoped to the user (`resourceId`): dietary restrictions, allergies, usual location, and food likes/dislikes. The agent reads it to avoid re-asking and updates it when you state a durable fact ("I'm gluten-free, remember that"). Transient context (one-off cravings/locations) is not persisted.
 
+Memory has its own connection resolver (`src/mastra/memory/index.ts`): it uses `MEMORY_DB_URL` / `MEMORY_DB_AUTH_TOKEN` if set, otherwise **inherits `MASTRA_DB_URL`**, otherwise falls back to a local file `.mastra/find-food-memory.db`. So if `MASTRA_DB_URL` points at Turso, conversation history and the user profile are written to Turso too.
+
 Local DB files live under `.mastra/` (gitignored).
+
+### Turso (cloud libsql)
+
+[Turso](https://turso.tech) is a hosted [libsql](https://github.com/tursodatabase/libsql) database — SQLite's storage engine with a remote, network-accessible server. The app treats it as a drop-in libsql store, so the only difference from a local SQLite file is the connection target.
+
+**How the app connects.** Two env vars (in `orchestra/.env` or repo-root `.env`):
+
+```bash
+MASTRA_DB_URL=libsql://<db-name>-<org>.<region>.turso.io   # e.g. find-food-tanzeelak.aws-us-east-2.turso.io
+MASTRA_DB_AUTH_TOKEN=<database-token>                       # JWT scoped to this DB
+```
+
+The auth token is a **per-database token** and is independent of the Turso CLI login — the running app authenticates with this token alone, so you do *not* need `turso auth login` for the app to work. When `MASTRA_DB_URL` is unset, everything falls back to local files under `.mastra/` and Turso is not involved.
+
+**What lives in the DB.** Mastra creates `mastra_*` tables; the ones that matter here:
+
+| Table | Contents |
+|---|---|
+| `mastra_threads` | one row per conversation |
+| `mastra_messages` | individual chat messages |
+| `mastra_resources` | per-user working memory (the food profile, keyed by `resourceId`) |
+| `mastra_ai_spans` | observability **traces** |
+
+Note: libsql/Turso stores **traces, not metrics** — metrics go to DuckDB (see [Observability & metrics](#observability--metrics)).
+
+**Inspecting it.** Install the CLI and authenticate once (browser OAuth):
+
+```bash
+brew install tursodatabase/tap/turso   # or: curl -sSfL https://get.tur.so/install.sh | bash
+turso auth login
+turso db list                          # confirm the db name
+```
+
+Then open a SQL shell against it (the `db:shell` script targets the `find-food` DB):
+
+```bash
+npm run db:shell
+# equivalently:
+turso db shell find-food
+```
+
+**Sample queries.** Run these in `npm run db:shell`, or pass them inline as `turso db shell find-food "<sql>"`:
+
+```sql
+-- list all tables
+SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name;
+
+-- saved user profiles (working memory), one row per resourceId
+SELECT id, workingMemory FROM mastra_resources;
+
+-- recent conversations
+SELECT id, resourceId, title, createdAt
+FROM mastra_threads
+ORDER BY createdAt DESC
+LIMIT 10;
+
+-- all threads for a specific user
+SELECT id, title, createdAt
+FROM mastra_threads
+WHERE resourceId = 'cli-user'
+ORDER BY createdAt DESC;
+
+-- message count per thread
+SELECT thread_id, COUNT(*) AS messages
+FROM mastra_messages
+GROUP BY thread_id
+ORDER BY messages DESC;
+
+-- full transcript of one thread (oldest first)
+SELECT role, createdAt, content
+FROM mastra_messages
+WHERE thread_id = '<thread-id>'
+ORDER BY createdAt;
+
+-- recent observability traces / agent runs
+SELECT name, spanType, startedAt, endedAt
+FROM mastra_ai_spans
+ORDER BY startedAt DESC
+LIMIT 20;
+
+-- top-level (root) spans only
+SELECT name, startedAt, endedAt
+FROM mastra_ai_spans
+WHERE parentSpanId IS NULL
+ORDER BY startedAt DESC
+LIMIT 10;
+
+-- spans that errored
+SELECT name, error
+FROM mastra_ai_spans
+WHERE error IS NOT NULL
+ORDER BY startedAt DESC
+LIMIT 10;
+```
+
+**Web dashboard.** You can also browse and query the database visually in the Turso dashboard at **https://app.turso.tech/** — sign in, then open org `tanzeelak` → database `find-food` (it has a data browser and a SQL console).
 
 ## Observability & metrics
 
@@ -189,6 +288,7 @@ When `MASTRA_DB_URL` points at a shared cloud libsql (Turso) DB, local runs and 
 npm run cli         # interactive CLI
 npm run serve       # HTTP + SSE server
 npm run dev         # Mastra dev playground
+npm run db:shell    # open a Turso SQL shell against the find-food DB
 npm run typecheck   # tsc --noEmit
 npm run build       # tsc
 ```

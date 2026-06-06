@@ -1,5 +1,7 @@
 - Fix `npm run cli` and `npm run dev` lock condition
 - Add a browser UI
+- Figure out if memory is stored on prod
+
 - Fix before sharing the URL publicly:
     * Put auth in front of the endpoints, OR
     * Add a thin backend proxy that holds the API keys, enforces identity, and
