@@ -1,6 +1,6 @@
 # Find Food — Orchestra
 
-Conversational agent that finds specific, orderable menu items (not just restaurants) matching a user's dietary restrictions near a location. Built on the [Mastra](https://mastra.ai) TypeScript agent framework, accessible from both a CLI and an HTTP/streaming API.
+Conversational agent that finds specific, orderable menu items (not just restaurants) matching a user's dietary restrictions near a location. Built on the [Mastra](https://mastra.ai) TypeScript agent framework, accessible from a CLI, an HTTP/streaming API, and a React chat UI (Assistant UI, in the sibling [`app/`](../app) directory).
 
 ## Tech stack
 
@@ -9,6 +9,8 @@ Conversational agent that finds specific, orderable menu items (not just restaur
 | Agent framework | **Mastra** (`@mastra/core`) — agents, tools, agent loop |
 | Model provider | **OpenRouter** via `@openrouter/ai-sdk-provider` (default `anthropic/claude-sonnet-4`) |
 | Web search | **Exa**, accessed through its hosted **MCP server** (`@mastra/mcp`) |
+| Chat API | **AI SDK-compatible route** via `@mastra/ai-sdk` `chatRoute()` — `POST /chat/:agentId` |
+| Frontend | **Assistant UI** (`@assistant-ui/react`, `@assistant-ui/react-ai-sdk`) on **Next.js** — sibling [`app/`](../app) |
 | Memory | **Mastra memory** + **libsql** (`@mastra/memory`, `@mastra/libsql`) — conversation history + persistent per-user profile |
 | Storage | **libsql** (`@mastra/libsql`) for the default store, **DuckDB** (`@mastra/duckdb`) for the observability/metrics domain, wired together with a `MastraCompositeStore` |
 | Observability | **Mastra observability** (`@mastra/observability`) — traces + metrics via `MastraStorageExporter` |
@@ -33,11 +35,12 @@ The orchestrator chats with the user, asks for any missing inputs (food, locatio
 ## Project layout
 
 ```txt
+../app/                        Next.js + Assistant UI chat frontend (separate package)
 src/
   cli.ts                       CLI adapter (readline -> agent stream -> stdout)
   server.ts                    HTTP adapter (POST /api/chat -> SSE stream)
   mastra/
-    index.ts                   Mastra instance (registers agents + storage)
+    index.ts                   Mastra instance (agents + storage + chatRoute /chat/:agentId)
     run.ts                     runFindFoodTurn(): shared, transport-agnostic entry
     events.ts                  fullStream -> UI progress events (text/reasoning/tool)
     model.ts                   OpenRouter model wiring
@@ -133,6 +136,30 @@ To continue a conversation, send the `threadId` from the first event back in the
 ```bash
 npm run dev    # mastra dev — local playground UI + auto-exposed agent endpoints
 ```
+
+### Assistant UI frontend (Next.js)
+
+A React chat UI lives in the sibling [`app/`](../app) directory (Next.js + Tailwind + [Assistant UI](https://www.assistant-ui.com/)). It talks to the agent through an AI SDK-compatible endpoint exposed by `chatRoute()` in `src/mastra/index.ts`:
+
+```ts
+import { chatRoute } from "@mastra/ai-sdk";
+// ...
+server: { apiRoutes: [ chatRoute({ path: "/chat/:agentId", sendReasoning: true }) ] }
+```
+
+This makes every registered agent available in AI SDK format; `findFood` is served at **`POST /chat/findFood`**. The route is served by `mastra dev` (and the deployed Mastra server) — **not** by the custom `npm run serve` HTTP server (`src/server.ts`), which is a separate hand-rolled transport.
+
+Run both halves (two terminals):
+
+```bash
+# terminal 1 — agent server (this directory)
+nvm use && npm run dev                     # mastra dev on http://localhost:4111
+
+# terminal 2 — frontend (repo-root app/)
+cd ../app && npm install && npm run dev     # Next.js on http://localhost:3000
+```
+
+The frontend points at `http://localhost:4111/chat/findFood` by default. Override the base URL with `NEXT_PUBLIC_MASTRA_URL` in `app/.env.local` — e.g. set it to `https://food-agent.server.mastra.cloud` to chat against prod. The wiring lives in `app/src/components/assistant.tsx` (`useChatRuntime` + `AssistantChatTransport`).
 
 ## Storage & memory
 
@@ -275,7 +302,7 @@ To generate metrics from the CLI instead of the Studio playground:
 
 The project is deployed to the **Mastra platform** (see `.mastra-project.json` — project `food-agent`):
 
-- **Deployed server / API:** https://food-agent.server.mastra.cloud/ — the running agent server (the prod equivalent of `npm run serve`); hosts the agent endpoints (e.g. `POST /api/agents/findFood/generate`).
+- **Deployed server / API:** https://food-agent.server.mastra.cloud/ — the running agent server (the prod equivalent of `npm run dev`); hosts the agent endpoints, including the AI SDK chat route `POST /chat/findFood` (point the frontend here via `NEXT_PUBLIC_MASTRA_URL`) and `POST /api/agents/findFood/generate`.
 - **Deployed Studio:** https://food-agent.studio.mastra.cloud/ — the prod dashboard. Use **Observability → Traces / Metrics** to inspect production runs, plus the playground, logs, and memory.
 
 You can also reach these from **https://projects.mastra.ai/** by selecting the `food-agent` project; `mastra studio deploy list` lists the current deployment URLs.

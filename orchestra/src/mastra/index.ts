@@ -3,6 +3,7 @@ import { MastraCompositeStore } from "@mastra/core/storage";
 import { LibSQLStore } from "@mastra/libsql";
 import { DuckDBStore } from "@mastra/duckdb";
 import { Observability, MastraStorageExporter } from "@mastra/observability";
+import { chatRoute } from "@mastra/ai-sdk";
 import { resolveLibSQLConnection, resolveDataPath } from "./env.js";
 import { findFoodAgent } from "./agents/find-food.js";
 import { researchRestaurantAgent } from "./agents/research-restaurant.js";
@@ -37,5 +38,12 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter()]
       }
     }
-  })
+  }),
+  server: {
+    apiRoutes: [
+      // AI SDK-compatible chat endpoint for the assistant-ui frontend.
+      // findFood is exposed at POST /chat/findFood.
+      chatRoute({ path: "/chat/:agentId", sendReasoning: true })
+    ]
+  }
 });
