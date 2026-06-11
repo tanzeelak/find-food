@@ -23,6 +23,7 @@
     "@mastra/memory": "^1.20.0",
     "@mastra/observability": "^1.14.0",
     "@openrouter/ai-sdk-provider": "^2.9.0",
+    "mem0ai": "^3.0.6",
     "zod": "^4.4.3"
   },
   "devDependencies": {

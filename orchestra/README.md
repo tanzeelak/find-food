@@ -70,6 +70,10 @@ Environment (read from `orchestra/.env` or the repo-root `.env`):
 ```bash
 EXA_API_KEY=...            # required — Exa MCP search
 OPENROUTER_API_KEY=...     # required — model provider
+MEM0_API_KEY=...           # required — Mem0 long-term memory (compared against Mastra working memory)
+
+# optional — Mem0 fallback user id when no resourceId is supplied (e.g. the chatRoute path)
+MEM0_USER_ID=find-food-user
 
 # optional — shared cloud store (libsql/Turso). The auth token is a per-database
 # token (independent of `turso auth login`). When unset, the default store and
@@ -323,4 +327,5 @@ npm run build       # tsc
 ## Notes
 
 - Search uses Exa's hosted MCP server (`https://mcp.exa.ai/mcp`), not a direct REST client.
-- Observability (traces + metrics) is built in via Mastra's storage exporter; traces persist to the default libsql store and metrics to DuckDB (see [Observability & metrics](#observability--metrics)). Mem0 is intentionally deferred; the current build relies on Mastra's built-in memory.
+- Observability (traces + metrics) is built in via Mastra's storage exporter; traces persist to the default libsql store and metrics to DuckDB (see [Observability & metrics](#observability--metrics)).
+- **Two memory systems run side by side for comparison.** Mastra's built-in *working memory* (resource-scoped profile template, libsql) and *Mem0* long-term memory (semantic, hosted via `mem0ai` with `MEM0_API_KEY`) are both wired into the `findFood` agent. Mem0 is exposed as two tools — `mem0Remember` (search) and `mem0Memorize` (save) — defined in `src/mastra/memory/mem0.ts`. The agent reads/writes the same durable facts to both, scoped by the same `resourceId` (forwarded via `requestContext` in `run.ts`), so the two approaches can be compared directly. (The official `@mastra/mem0` integration is pinned to `@mastra/core <0.17` and is incompatible with this project's `@mastra/core@1.x`, so the `mem0ai` SDK is wrapped in Mastra tools directly.)
