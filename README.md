@@ -51,7 +51,7 @@ legacy/
   architecture.md              legacy behavior notes
 
 plan.md                       migration plan / design notes
-TODOs                         older project TODOs
+TODOs                         TODOs
 ```
 
 ## Local Development

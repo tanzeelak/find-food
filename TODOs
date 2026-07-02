@@ -5,6 +5,7 @@ MVP
 
 TODOS
 [ ] Improve location search
+[ ] Have previous chat history persist when switching tabs
 [ ] Add read and write privileges per profile
     - Build a settings page/form (no agent) that directly updates working memory via:
         memory.updateWorkingMemory({ threadId: "any", resourceId: "tanzeela", workingMemory: string })
