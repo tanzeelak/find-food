@@ -4,6 +4,10 @@ export const confidenceSchema = z.enum(["low", "medium", "high"]);
 
 export const menuItemSchema = z.object({
   name: z.string().describe("Specific orderable menu item name"),
+  price: z
+    .string()
+    .default("")
+    .describe("Price as it appears in the source, including currency symbol (e.g. \"$14\"). Empty string if unknown."),
   whyItFits: z.string().describe("Short, evidence-based reason it satisfies the restrictions"),
   caveats: z.array(z.string()).default([]).describe("Ordering tips or cross-contamination notes, if any")
 });

@@ -34,8 +34,8 @@ Present results conversationally. For each kept restaurant use exactly this stru
 
 **<Restaurant Name>** — <distance/walk estimate if known>
 - Menu items:
-  - <specific dish that meets ALL restrictions>
-  - <specific dish that meets ALL restrictions>
+  - <specific dish that meets ALL restrictions> — <price if known>
+  - <specific dish that meets ALL restrictions> — <price if known>
 - Dietary accommodations:
   - <source-backed accommodation>
   - <source-backed accommodation>
@@ -44,6 +44,7 @@ Rules for results:
 - Return at most 5 restaurants, deduped by name.
 - Use 2-5 nested bullets per section; never pad.
 - Each menu item must be a real, orderable dish supported by the research — never invent dishes or accommodations.
+- Show each item's price when the research provides one; omit the price (and the dash) when it is unknown. Never invent or estimate prices.
 - Do not include items whose only justification is "verify this is gluten-free/etc." Those are not acceptable.
 - If nothing matches, say so honestly and suggest broadening (wider radius, fewer restrictions, or a different dish). Do not fabricate restaurants.
 
@@ -54,12 +55,13 @@ export const researchRestaurantInstructions = `You research ONE restaurant to de
 You have Exa web tools available (web search and page fetching). Use them efficiently:
 1. Search for the restaurant's menu using a query that joins the restaurant name with the location, the food query, and the dietary keywords plus the word "menu". Example: "La Taqueria Mission District SF fish tacos gluten-free menu".
 2. Pick the 1-2 most menu-relevant URLs (prefer the restaurant's own menu page, then reputable reviews or allergen guides) and fetch them.
-3. From the fetched text, extract specific menu items that satisfy ALL dietary restrictions. Quote dish names as they appear in the source.
+3. From the fetched text, extract specific menu items that satisfy ALL dietary restrictions. Quote dish names as they appear in the source, and capture each item's price exactly as listed (including the currency symbol) when the source shows one.
 
 Keep tool usage tight: a few calls at most. Do not browse beyond what you need.
 
 Rules for the result:
 - Treat dietary restrictions as hard filters. If the source does not support that an item satisfies every restriction, do not include it.
+- Include the price for each item when the source lists one; leave it empty if no price is shown. Never invent or estimate a price.
 - For gluten-free requests, exclude beer-battered, breaded, tempura, wheat, flour, or flour-tortilla items unless the source explicitly marks the item gluten-free.
 - Caveats may mention cross-contamination or ordering instructions, but only after the item already satisfies the restrictions.
 - Never fabricate dishes or accommodations. Always include the source URLs you used.
