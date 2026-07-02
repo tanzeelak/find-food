@@ -5,5 +5,13 @@ MVP
 
 TODOS
 [ ] Improve location search
-[ ] Add profiles 
-    [ ] Add read and write privileges per profile
+[ ] Add read and write privileges per profile
+    - Build a settings page/form (no agent) that directly updates working memory via:
+        memory.updateWorkingMemory({ threadId: "any", resourceId: "tanzeela", workingMemory: string })
+      `workingMemory` is the raw filled-in markdown template string. With scope:"resource"
+      (already configured), threadId is ignored — only resourceId determines storage.
+    - Read it back with: memory.getWorkingMemory({ threadId: "any", resourceId: "tanzeela" })
+    - For the guest/finder agent, use memory.getReadOnlyWorkingMemoryInstruction() to
+      generate a system prompt that exposes the profile read-only (built-in Mastra helper).
+    - For proper authorization: wire Mastra FGA (MastraFGAPermissions.MEMORY_WRITE) so
+      only the owner resourceId can write; guests get read-only thread access.
