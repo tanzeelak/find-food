@@ -4,12 +4,6 @@ MVP
 [x] show me specific items from each of the menus from the restaurants
 
 TODOS
-- Allow user to customize the dieteary restrictions
-- Use the codebuff output schema
-- Get the location automatically
-- Improve context of results with Yelp
-
-How to Add Subagents
-- Copy your entire agent
-- Restaurant researchers in parallel
-- Choose a medium-smart model
+[ ] Improve location search
+[ ] Add profiles 
+    [ ] Add read and write privileges per profile

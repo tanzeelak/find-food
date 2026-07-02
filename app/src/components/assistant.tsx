@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef } from "react";
 import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
@@ -14,6 +15,13 @@ import {
 const MASTRA_URL =
   process.env.NEXT_PUBLIC_MASTRA_URL ?? "http://localhost:4111";
 const AGENT_ID = "findFood";
+
+const PROFILES = [
+  { id: "tanzeela", label: "Tanzeela" },
+  { id: "guest", label: "Guest" },
+] as const;
+
+type ProfileId = (typeof PROFILES)[number]["id"];
 
 function UserMessage() {
   return (
@@ -35,10 +43,22 @@ function AssistantMessage() {
   );
 }
 
-export function Assistant() {
+function ChatPanel({ resourceId }: { resourceId: ProfileId }) {
+  const resourceIdRef = useRef(resourceId);
+  resourceIdRef.current = resourceId;
+
+  // Stable thread ID for this session — resets when profile changes (via key={resourceId})
+  const threadId = useRef(crypto.randomUUID()).current;
+
   const runtime = useChatRuntime({
     transport: new AssistantChatTransport({
       api: `${MASTRA_URL}/chat/${AGENT_ID}`,
+      body: () => ({
+        memory: {
+          thread: threadId,
+          resource: resourceIdRef.current,
+        },
+      }),
     }),
   });
 
@@ -72,5 +92,31 @@ export function Assistant() {
         </ComposerPrimitive.Root>
       </ThreadPrimitive.Root>
     </AssistantRuntimeProvider>
+  );
+}
+
+export function Assistant() {
+  const [resourceId, setResourceId] = useState<ProfileId>("tanzeela");
+
+  return (
+    <div className="flex h-full w-full max-w-3xl flex-col">
+      <div className="flex items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">Profile:</span>
+        {PROFILES.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setResourceId(p.id)}
+            className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+              resourceId === p.id
+                ? "bg-blue-600 text-white"
+                : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      <ChatPanel key={resourceId} resourceId={resourceId} />
+    </div>
   );
 }
