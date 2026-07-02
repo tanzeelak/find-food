@@ -3,7 +3,6 @@ import { orchestratorModel } from "../model.js";
 import { findFoodInstructions } from "../prompts.js";
 import { exaSearchTools } from "../mcp/exa.js";
 import { memory } from "../memory/index.js";
-import { mem0RememberTool, mem0MemorizeTool } from "../memory/mem0.js";
 import { researchRestaurantTool } from "../tools/research-restaurant.js";
 
 export const findFoodAgent = new Agent({
@@ -15,8 +14,6 @@ export const findFoodAgent = new Agent({
   memory,
   tools: async () => ({
     ...(await exaSearchTools()),
-    researchRestaurant: researchRestaurantTool,
-    mem0Remember: mem0RememberTool,
-    mem0Memorize: mem0MemorizeTool
+    researchRestaurant: researchRestaurantTool
   })
 });
