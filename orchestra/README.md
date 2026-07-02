@@ -308,6 +308,25 @@ The project is deployed to the **Mastra platform** (see `.mastra-project.json` �
 
 - **Deployed server / API:** https://food-agent.server.mastra.cloud/ — the running agent server (the prod equivalent of `npm run dev`); hosts the agent endpoints, including the AI SDK chat route `POST /chat/findFood` (point the frontend here via `NEXT_PUBLIC_MASTRA_URL`) and `POST /api/agents/findFood/generate`.
 - **Deployed Studio:** https://food-agent.studio.mastra.cloud/ — the prod dashboard. Use **Observability → Traces / Metrics** to inspect production runs, plus the playground, logs, and memory.
+- **Production frontend:** https://find-food-kohl.vercel.app/ — the deployed Next.js app that talks to the Mastra server above.
+
+The Vercel frontend calls the deployed **server/API**, so after backend code changes run a Mastra Server deploy from this directory:
+
+```bash
+mastra server deploy
+```
+
+If backend environment variables changed, update them on the server too:
+
+```bash
+npx mastra server env import .env
+```
+
+Deploy Studio when the dashboard/playground bundle needs to be updated:
+
+```bash
+mastra studio deploy --project food-agent
+```
 
 You can also reach these from **https://projects.mastra.ai/** by selecting the `food-agent` project; `mastra studio deploy list` lists the current deployment URLs.
 
