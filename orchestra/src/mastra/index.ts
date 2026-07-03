@@ -4,7 +4,8 @@ import { LibSQLStore } from "@mastra/libsql";
 import { DuckDBStore } from "@mastra/duckdb";
 import { Observability, MastraStorageExporter } from "@mastra/observability";
 import { chatRoute } from "@mastra/ai-sdk";
-import { resolveLibSQLConnection, resolveDataPath } from "./env.js";
+import { MastraAuthSupabase } from "@mastra/auth-supabase";
+import { resolveLibSQLConnection, resolveDataPath, getEnv } from "./env.js";
 import { findFoodAgent } from "./agents/find-food.js";
 import { researchRestaurantAgent } from "./agents/research-restaurant.js";
 
@@ -40,6 +41,14 @@ export const mastra = new Mastra({
     }
   }),
   server: {
+    auth: new MastraAuthSupabase({
+      url: getEnv("SUPABASE_URL", ""),
+      anonKey: getEnv("SUPABASE_ANON_KEY", ""),
+      authorizeUser: async () => true,
+      mapUserToResourceId: (user) => user.id,
+      protected: [],
+      public: [/^\/chat\//, "/health"],
+    }),
     apiRoutes: [
       // AI SDK-compatible chat endpoint for the assistant-ui frontend.
       // findFood is exposed at POST /chat/findFood.

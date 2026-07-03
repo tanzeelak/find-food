@@ -12,13 +12,20 @@ and accommodations.
 ```txt
 Browser / Vercel frontend
   -> Next.js + Assistant UI (`app/`)
+     -> Supabase Auth (Google sign-in)
+     -> proxy.ts refreshes Supabase session cookies
+     -> /auth/callback exchanges OAuth code for session
+     -> /api/chat/[agentId] injects resourceId + forwards JWT to Mastra
   -> AI SDK chat route on the Mastra server
-     POST /chat/findFood
+     POST /chat/findFood  (Authorization: Bearer <supabase-jwt>)
+       -> @mastra/auth-supabase verifies JWT (optional — guests pass through)
        -> Find Food orchestrator agent (`orchestra/`)
           -> Exa MCP web search
           -> researchRestaurant tool
              -> bounded restaurant research agent
-          -> Mastra working memory + Mem0
+          -> Mastra working memory (scope: "resource", keyed by Supabase user UUID)
+             authenticated users: persistent profile across sessions
+             guests: ephemeral (fresh UUID per page load, nothing stored)
           -> libsql / Turso storage and Mastra observability
 ```
 
@@ -34,24 +41,30 @@ The old Go backend and Codebuff runtime are no longer the active app.
 
 ```txt
 app/
-  src/app/                     Next.js app shell
-  src/components/assistant.tsx Assistant UI chat frontend
+  src/proxy.ts                         Next.js 16 proxy — refreshes Supabase session cookies
+  src/app/auth/callback/route.ts       OAuth code → Supabase session exchange
+  src/app/api/chat/[agentId]/route.ts  Next.js → Mastra proxy, injects resourceId + JWT
+  src/app/login/page.tsx               Sign-in page (Google)
+  src/app/page.tsx                     Home — reads Supabase user server-side
+  src/components/assistant.tsx         Assistant UI chat frontend + auth header
+  src/components/login-form.tsx        Google sign-in button
+  src/lib/supabase/server.ts           Server-side Supabase client (cookies)
+  src/lib/supabase/client.ts           Browser Supabase client
 
 orchestra/
-  src/cli.ts                   local interactive CLI
-  src/server.ts                optional custom HTTP/SSE server at /api/chat
-  src/mastra/index.ts          Mastra instance, agents, storage, /chat/:agentId
-  src/mastra/agents/           orchestrator and research agents
-  src/mastra/tools/            researchRestaurant tool
-  src/mastra/memory/           Mastra memory + Mem0 tools
-  .mastra-project.json         linked Mastra project (`food-agent`)
+  src/cli.ts                           local interactive CLI
+  src/mastra/index.ts                  Mastra instance, agents, storage, auth, /chat/:agentId
+  src/mastra/agents/                   orchestrator and research agents
+  src/mastra/tools/                    researchRestaurant tool
+  src/mastra/memory/                   Mastra working memory (LibSQL, scope: "resource")
+  .mastra-project.json                 linked Mastra project (`food-agent`)
 
 legacy/
-  .agents/                     original Codebuff agent definitions
-  architecture.md              legacy behavior notes
+  .agents/                             original Codebuff agent definitions
+  architecture.md                      legacy behavior notes
 
-plan.md                       migration plan / design notes
-TODOs                         TODOs
+plan.md                               original migration plan (historical)
+TODOs                                 TODOs
 ```
 
 ## Local Development
@@ -70,7 +83,8 @@ Required for real agent runs:
 ```bash
 EXA_API_KEY=...
 OPENROUTER_API_KEY=...
-MEM0_API_KEY=...
+SUPABASE_URL=...
+SUPABASE_ANON_KEY=...
 ```
 
 Optional production/shared storage:
@@ -195,15 +209,19 @@ Framework: Next.js
 Build Command: npm run build
 ```
 
-Set this Vercel environment variable:
+Set these Vercel environment variables:
 
 ```bash
-NEXT_PUBLIC_MASTRA_URL=https://food-agent.server.mastra.cloud
+MASTRA_URL=https://food-agent.server.mastra.cloud
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-Do not put backend secrets such as `OPENROUTER_API_KEY`, `EXA_API_KEY`, or
-`MEM0_API_KEY` in the Vercel frontend project. Those belong on the Mastra
-Server deployment.
+Also add your production URL to the Supabase redirect URL allowlist:
+`https://your-production-domain.com/auth/callback`
+
+Do not put backend secrets such as `OPENROUTER_API_KEY` or `EXA_API_KEY`
+in the Vercel frontend project. Those belong on the Mastra Server deployment.
 
 ## Verify
 

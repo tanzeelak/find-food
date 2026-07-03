@@ -7,13 +7,41 @@ TODOS
 [ ] Use Mintlify
 [ ] Improve location search
 [ ] Have previous chat history persist when switching tabs
-[ ] Add read and write privileges per profile
-    - Build a settings page/form (no agent) that directly updates working memory via:
-        memory.updateWorkingMemory({ threadId: "any", resourceId: "tanzeela", workingMemory: string })
+
+--- AUTH & PERMISSIONS ---
+
+[x] Basic login (Mastra SimpleAuth) — replaced by Supabase below
+[x] Auth: Supabase + Google sign-in
+    - Users sign in with Google via Supabase Auth
+    - Supabase issues a JWT; Next.js proxy (proxy.ts) refreshes sessions
+    - /auth/callback route exchanges OAuth code for a Supabase session
+    - Next.js API route reads session.access_token and forwards it to Mastra
+    - /chat/* routes are public on Mastra (optional auth); resourceId is
+      injected server-side from session.user.id (authenticated) or a
+      client-generated UUID per page load (guest — no persistence)
+    - Mastra @mastra/auth-supabase verifies the JWT when present
+    - Each signed-in user's Supabase UUID is their memory resourceId
+    - Guest memory is ephemeral: fresh UUID per page load, nothing persists
+
+[x] Remove mem0 — rely exclusively on Mastra built-in working memory
+    - scope: "resource" stores working memory per resourceId across threads
+
+[ ] Profile management: settings page for direct memory writes (no agent)
+    - Build a form that directly calls:
+        memory.updateWorkingMemory({ threadId: "any", resourceId: "<supabase-user-id>", workingMemory: string })
       `workingMemory` is the raw filled-in markdown template string. With scope:"resource"
       (already configured), threadId is ignored — only resourceId determines storage.
-    - Read it back with: memory.getWorkingMemory({ threadId: "any", resourceId: "tanzeela" })
-    - For the guest/finder agent, use memory.getReadOnlyWorkingMemoryInstruction() to
-      generate a system prompt that exposes the profile read-only (built-in Mastra helper).
-    - For proper authorization: wire Mastra FGA (MastraFGAPermissions.MEMORY_WRITE) so
-      only the owner resourceId can write; guests get read-only thread access.
+    - Read back with: memory.getWorkingMemory({ threadId: "any", resourceId: "<supabase-user-id>" })
+    - Protect the API route so only the authenticated user can write their own profile
+
+[ ] Cross-user read-only access (FGA)
+    - Goal: user B can use the agent to find food FOR user A using A's dietary profile,
+      but cannot modify A's profile.
+    - Read path: user B's request includes user A's resourceId; Mastra reads A's working memory
+      using memory.getReadOnlyWorkingMemoryInstruction() — a built-in Mastra helper that exposes
+      the profile as context without allowing writes.
+    - Write protection: wire Mastra FGA (MastraFGAPermissions.MEMORY_WRITE) so only the owner
+      (user A) can write to resourceId A; all others get read-only thread access.
+    - Requires FGA provider integration (e.g. Permit.io) on the Mastra server.
+    - Mastra FGA hook: enforceThreadAccess() already checks MEMORY_WRITE permissions when
+      a thread is accessed — just needs the FGA provider wired up.
