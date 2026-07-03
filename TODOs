@@ -1,15 +1,65 @@
-MVP
-[x] agent that can acess the yelp or exa MCP
-[x] search for "gluten free" restaurants
-[x] show me specific items from each of the menus from the restaurants
-
 TODOS
+[ ] Cross-user read-only access via Supabase (replaces Mastra FGA / Permit.io approach)
+    Goal: user B can use the agent to find food FOR user A using A's dietary profile.
+    Owner (user A) explicitly grants read access to user B. Enforced server-side.
+
+    --- STEP 1: Supabase schema (run in SQL Editor) ---
+    [ ] Create profiles table + trigger (auto-populated on sign-up):
+          create table public.profiles (
+            id uuid primary key references auth.users(id) on delete cascade,
+            email text, display_name text, created_at timestamptz default now()
+          );
+          -- RLS: publicly readable, owner can update
+          -- Trigger: handle_new_user() inserts row on auth.users insert
+    [ ] Create profile_access table:
+          create table public.profile_access (
+            owner_id uuid references auth.users(id) on delete cascade,
+            grantee_id uuid references auth.users(id) on delete cascade,
+            created_at timestamptz default now(),
+            primary key (owner_id, grantee_id)
+          );
+          -- RLS: owner/grantee can SELECT; only owner can INSERT/DELETE
+    [ ] Backfill existing users:
+          insert into public.profiles (id, email, display_name)
+          select id, email, raw_user_meta_data->>'full_name' from auth.users
+          on conflict (id) do nothing;
+
+    --- STEP 2: Next.js API routes (app/src/app/api/access/) ---
+    [ ] GET  /api/access — returns profiles the current user can access
+          Query: profile_access WHERE grantee_id = me, JOIN profiles on owner_id
+          Response: [{ id, email, display_name }]
+    [ ] POST /api/access — grant access to a grantee by email
+          Body: { email: string }
+          Lookup grantee in profiles by email, insert (owner_id=me, grantee_id)
+    [ ] DELETE /api/access — revoke access
+          Body: { granteeId: string }
+          Delete row where owner_id=me AND grantee_id=granteeId
+
+    --- STEP 3: Chat proxy update (app/src/app/api/chat/[agentId]/route.ts) ---
+    [ ] Accept optional targetResourceId in request body
+          If present and user is authenticated:
+            verify profile_access row exists (owner_id=targetResourceId, grantee_id=me)
+            if verified: inject memory.resource = targetResourceId
+            if not verified: 403
+          If absent: inject memory.resource = session.user.id (existing behaviour)
+
+    --- STEP 4: Frontend ---
+    [ ] Profile selector dropdown in assistant.tsx header
+          Fetch GET /api/access on mount (only when signed in)
+          Options: "Me" (own profile) + any granted profiles
+          Default: "Me"
+          On change: pass selectedResourceId into ChatPanel as resourceId prop
+          (ChatPanel already accepts resourceId and sends it in the body)
+    [ ] Settings / access management panel (optional, can do later)
+          Let owner grant/revoke access via POST/DELETE /api/access
+          Show current grantees
 [ ] Use Mintlify
 [ ] Improve location search
-[ ] Have previous chat history persist when switching tabs
-
---- AUTH & PERMISSIONS ---
-
+[ ] Have the frontend show more thinking so it's more apparently responsive
+[ ] make frontend scroll a fixed window
+[ ] Switch to a cheaper model on the backend
+[x] agent that can acess the yelp or exa MCP
+[x] search for "gluten free" restaurants
 [x] Auth: Supabase + Google sign-in
     - Users sign in with Google via Supabase Auth
     - Supabase issues a JWT; Next.js proxy (proxy.ts) refreshes sessions
@@ -21,27 +71,6 @@ TODOS
     - Mastra @mastra/auth-supabase verifies the JWT when present
     - Each signed-in user's Supabase UUID is their memory resourceId
     - Guest memory is ephemeral: fresh UUID per page load, nothing persists
-
 [x] Remove mem0 — rely exclusively on Mastra built-in working memory
     - scope: "resource" stores working memory per resourceId across threads
-
-[ ] Profile management: settings page for direct memory writes (no agent)
-    - Build a form that directly calls:
-        memory.updateWorkingMemory({ threadId: "any", resourceId: "<supabase-user-id>", workingMemory: string })
-      `workingMemory` is the raw filled-in markdown template string. With scope:"resource"
-      (already configured), threadId is ignored — only resourceId determines storage.
-    - Read back with: memory.getWorkingMemory({ threadId: "any", resourceId: "<supabase-user-id>" })
-    - Protect the API route so only the authenticated user can write their own profile
-
-[ ] Cross-user read-only access (FGA)
-    - Goal: user B can use the agent to find food FOR user A using A's dietary profile,
-      but cannot modify A's profile.
-    - Read path: user B's request includes user A's resourceId; Mastra reads A's working memory
-      using memory.getReadOnlyWorkingMemoryInstruction() — a built-in Mastra helper that exposes
-      the profile as context without allowing writes.
-    - Write protection: wire Mastra FGA (MastraFGAPermissions.MEMORY_WRITE) so only the owner
-      (user A) can write to resourceId A; all others get read-only thread access.
-    - Requires FGA provider integration (e.g. Permit.io) on the Mastra server.
-    - Mastra FGA hook: enforceThreadAccess() already checks MEMORY_WRITE permissions when
-      a thread is accessed — just needs the FGA provider wired up.
 [x] Remove unused env vars
