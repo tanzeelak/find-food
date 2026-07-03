@@ -1,12 +1,15 @@
 "use client";
 
-import { useRef, useCallback } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   AssistantRuntimeProvider,
   ThreadPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
+  useComposer,
+  useComposerRuntime,
+  useThread,
 } from "@assistant-ui/react";
 import {
   useChatRuntime,
@@ -37,8 +40,82 @@ function AssistantMessage() {
   );
 }
 
+function ChatPanelContent({
+  pendingMessage,
+  setPendingMessage,
+}: {
+  pendingMessage: string | null;
+  setPendingMessage: (msg: string | null) => void;
+}) {
+  const composerRuntime = useComposerRuntime();
+  const isRunning = useThread((t) => t.isRunning);
+  const isEmpty = useComposer((c) => c.isEmpty);
+  const composerText = useComposer((c) => c.text);
+
+  // When the agent finishes, flush the queued message
+  useEffect(() => {
+    if (!isRunning && pendingMessage !== null) {
+      composerRuntime.setText(pendingMessage);
+      composerRuntime.send();
+      setPendingMessage(null);
+    }
+  }, [isRunning, pendingMessage, composerRuntime, setPendingMessage]);
+
+  const handleSend = useCallback(() => {
+    if (isRunning) {
+      if (!composerText.trim()) return;
+      setPendingMessage(composerText);
+      composerRuntime.setText("");
+    } else {
+      composerRuntime.send();
+    }
+  }, [composerRuntime, composerText, isRunning, setPendingMessage]);
+
+  return (
+    <ThreadPrimitive.Root className="flex h-full w-full flex-col">
+      <ThreadPrimitive.Viewport className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+        <ThreadPrimitive.Empty>
+          <div className="m-auto text-center text-zinc-500">
+            <p className="text-lg font-medium">Find Food</p>
+            <p className="text-sm">
+              Ask for dietary-friendly menu items near a location.
+            </p>
+          </div>
+        </ThreadPrimitive.Empty>
+        <ThreadPrimitive.Messages
+          components={{ UserMessage, AssistantMessage }}
+        />
+      </ThreadPrimitive.Viewport>
+
+      <div className="border-t border-zinc-200 dark:border-zinc-800">
+        {pendingMessage && (
+          <p className="px-4 pt-2 text-xs text-zinc-400">
+            Queued: &ldquo;{pendingMessage}&rdquo;
+          </p>
+        )}
+        <ComposerPrimitive.Root className="flex items-end gap-2 p-4">
+          <ComposerPrimitive.Input
+            rows={1}
+            autoFocus
+            placeholder="gluten-free fish tacos in the Mission, SF…"
+            className="flex-1 resize-none rounded-xl border border-zinc-300 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700"
+          />
+          <button
+            onClick={handleSend}
+            disabled={isEmpty && !isRunning}
+            className="rounded-xl bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+          >
+            Send
+          </button>
+        </ComposerPrimitive.Root>
+      </div>
+    </ThreadPrimitive.Root>
+  );
+}
+
 function ChatPanel({ resourceId }: { resourceId: string }) {
   const threadId = useRef(crypto.randomUUID()).current;
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   const runtime = useChatRuntime({
     transport: new AssistantChatTransport({
@@ -49,33 +126,10 @@ function ChatPanel({ resourceId }: { resourceId: string }) {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <ThreadPrimitive.Root className="flex h-full w-full flex-col">
-        <ThreadPrimitive.Viewport className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <ThreadPrimitive.Empty>
-            <div className="m-auto text-center text-zinc-500">
-              <p className="text-lg font-medium">Find Food</p>
-              <p className="text-sm">
-                Ask for dietary-friendly menu items near a location.
-              </p>
-            </div>
-          </ThreadPrimitive.Empty>
-          <ThreadPrimitive.Messages
-            components={{ UserMessage, AssistantMessage }}
-          />
-        </ThreadPrimitive.Viewport>
-
-        <ComposerPrimitive.Root className="flex items-end gap-2 border-t border-zinc-200 p-4 dark:border-zinc-800">
-          <ComposerPrimitive.Input
-            rows={1}
-            autoFocus
-            placeholder="gluten-free fish tacos in the Mission, SF…"
-            className="flex-1 resize-none rounded-xl border border-zinc-300 bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700"
-          />
-          <ComposerPrimitive.Send className="rounded-xl bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50">
-            Send
-          </ComposerPrimitive.Send>
-        </ComposerPrimitive.Root>
-      </ThreadPrimitive.Root>
+      <ChatPanelContent
+        pendingMessage={pendingMessage}
+        setPendingMessage={setPendingMessage}
+      />
     </AssistantRuntimeProvider>
   );
 }

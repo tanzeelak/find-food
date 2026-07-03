@@ -44,3 +44,4 @@ TODOS
     - Requires FGA provider integration (e.g. Permit.io) on the Mastra server.
     - Mastra FGA hook: enforceThreadAccess() already checks MEMORY_WRITE permissions when
       a thread is accessed — just needs the FGA provider wired up.
+[x] Remove unused env vars

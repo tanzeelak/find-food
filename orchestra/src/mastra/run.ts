@@ -8,8 +8,6 @@ export type TurnInput = {
 };
 
 export async function runFindFoodTurn({ message, resourceId, threadId }: TurnInput) {
-  // resourceId is forwarded via requestContext so the Mem0 tools can scope
-  // long-term memory to the same id Mastra uses for working memory.
   const requestContext = new RequestContext();
   requestContext.set("resourceId", resourceId);
 
