@@ -10,7 +10,6 @@ TODOS
 
 --- AUTH & PERMISSIONS ---
 
-[x] Basic login (Mastra SimpleAuth) — replaced by Supabase below
 [x] Auth: Supabase + Google sign-in
     - Users sign in with Google via Supabase Auth
     - Supabase issues a JWT; Next.js proxy (proxy.ts) refreshes sessions
