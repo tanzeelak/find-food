@@ -22,12 +22,21 @@ export const researchRestaurantTool = createTool({
     try {
       // Phase 1: tool-using research that returns free-form findings.
       const research = await researchRestaurantAgent.generate(
-        `Research this restaurant and report which menu items match the food query and satisfy every dietary restriction. Cite the source URLs you used.
+        `You must follow these steps in order — do not skip any:
+
+STEP 1: Call exa_web_search_exa with the query "${restaurantName} ${input.location} menu" to find the restaurant's website or a dedicated menu page.
+STEP 2: From the search results, identify the best URL — prefer the restaurant's own domain or food media (Eater, Infatuation, SF Chronicle). Then call exa_web_fetch_exa on that URL to read the actual page content.
+STEP 3: Extract every dish name and price from the fetched page. If the page had no dish names, call exa_web_search_exa again with "${restaurantName} full menu" and fetch the next best URL.
+STEP 4: Report which dishes satisfy ALL of the dietary restrictions below. Quote dish names exactly as they appear on the menu.
+
+You MUST call exa_web_fetch_exa at least once. Do not draw conclusions from search snippets alone.
 
 Restaurant: ${restaurantName}
 Food query: ${input.foodQuery}
 Location: ${input.location}
-Dietary restrictions: ${joinOrNone(dietaryRestrictions)}`
+Dietary restrictions: ${joinOrNone(dietaryRestrictions)}
+
+Cite every URL you fetched.`
       );
 
       // Phase 2: tool-free structuring pass over the findings text.

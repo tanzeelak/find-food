@@ -1,7 +1,9 @@
 TODOS
+[ ] Improve location search
+[ ] Have the frontend show more thinking so it's more apparently responsive
+[ ] Consider adding evals
 [ ] Request access flow
       Goal: user B can request access to user A's profile; user A approves/denies in settings panel.
-
     --- STEP 1: Supabase schema (run in SQL Editor) ---
     [ ] Create profile_access_requests table:
           create table public.profile_access_requests (
@@ -19,7 +21,6 @@ TODOS
             for insert with check (auth.uid() = requester_id);
           create policy "requests_delete" on public.profile_access_requests
             for delete using (auth.uid() = owner_id or auth.uid() = requester_id);
-
     --- STEP 2: Next.js API routes (app/src/app/api/access/requests/) ---
     [ ] GET  /api/access/requests — returns pending requests to MY profile (I'm the owner)
           Query: profile_access_requests WHERE owner_id = me, JOIN profiles on requester_id
@@ -33,7 +34,6 @@ TODOS
     [ ] POST /api/access/requests/approve — owner approves a request
           Body: { requestId: string }
           Lookup request, insert into profile_access (owner_id=me, grantee_id=requester_id), delete request
-
     --- STEP 3: Settings panel UI (app/src/components/access-settings.tsx) ---
     [ ] Add "Pending requests" section — show requesters with Approve / Deny buttons
     [ ] Add "Request access" section — email input + Request button
@@ -41,8 +41,6 @@ TODOS
 
 [ ] Merged pane view — single chat that combines context from multiple profiles
 [ ] Use Mintlify
-[ ] Improve location search
-[ ] Have the frontend show more thinking so it's more apparently responsive
 [ ] Make frontend scroll a fixed window
 [ ] Switch to a cheaper model on the backend
 
@@ -76,3 +74,4 @@ TODOS
 [x] Remove mem0 — rely exclusively on Mastra built-in working memory
     - scope: "resource" stores working memory per resourceId across threads
 [x] Remove unused env vars
+[x] Use tools for research agent
