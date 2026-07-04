@@ -1,215 +1,134 @@
-# Find _your_ food
+# Find your food
 
-Find Food is a conversational app that finds specific, orderable menu items
-that match a user's dietary restrictions near a location. It returns menu-item
-recommendations with restaurant context, source-backed dietary fit, caveats,
-and accommodations.
+An AI-powered agent that finds specific menu items — not just restaurants — that match your dietary restrictions. Most apps stop at "vegetarian-friendly." This goes further, asking "can I actually eat this, and is it nourishing?" by scouring individual menus item by item.
+
+> **Published:** find-food on Codebuff — 🥇 First place at the Codebuff Agent Builder Hackathon
 
 ![find-food screenshot](screenshot.webp)
 
+---
+
+## What it does
+
+You describe what you're looking for — dietary restrictions, location, cuisine — and the agent:
+
+1. Recalls your dietary profile from memory (restrictions, allergies, preferences)
+2. Searches the web for restaurant candidates via Exa
+3. Spawns a research subagent per restaurant to check actual menu items
+4. Returns specific, orderable items with source-backed dietary fit, caveats, and ordering tips
+
+Authenticated users get a persistent dietary profile that improves over time. Guests get an ephemeral session with no cross-session memory.
+
+---
+
 ## Current Architecture
 
-```txt
-Browser / Vercel frontend
-  -> Next.js + Assistant UI (`app/`)
-     -> Supabase Auth (Google sign-in)
-     -> proxy.ts refreshes Supabase session cookies
-     -> /auth/callback exchanges OAuth code for session
-     -> /api/chat/[agentId] injects resourceId + forwards JWT to Mastra
-  -> AI SDK chat route on the Mastra server
-     POST /chat/findFood  (Authorization: Bearer <supabase-jwt>)
-       -> @mastra/auth-supabase verifies JWT (optional — guests pass through)
-       -> Find Food orchestrator agent (`orchestra/`)
-          -> Exa MCP web search
-          -> researchRestaurant tool
-             -> bounded restaurant research agent
-          -> Mastra working memory (scope: "resource", keyed by Supabase user UUID)
-             authenticated users: persistent profile across sessions
-             guests: ephemeral (fresh UUID per page load, nothing stored)
-          -> libsql / Turso storage and Mastra observability
+```
+Browser
+  └── Next.js frontend (Vercel)
+        ├── Google OAuth → Supabase Auth
+        ├── /api/access         — cross-user profile access management
+        └── /api/chat/[agentId] — authenticated proxy to Mastra
+
+Mastra backend (Mastra Server)
+  └── POST /chat/findFood
+        ├── findFood agent (orchestrator)
+        │     ├── Exa MCP — web search for restaurants + menus
+        │     └── researchRestaurant tool → bounded research subagent
+        └── Mastra working memory (LibSQL/Turso, scope: "resource")
+
+Supabase (PostgreSQL)
+  ├── auth.users            — Google OAuth identity
+  ├── public.profiles       — display name + email, auto-populated on sign-up
+  └── public.profile_access — cross-user read access grants (RLS enforced)
 ```
 
-Active runtime:
-
-- `app/` - Next.js frontend using Assistant UI.
-- `orchestra/` - Mastra TypeScript backend, agents, tools, memory, storage, and deployment config.
-- `legacy/` - old Codebuff implementation kept only for prompt/architecture reference.
-
-The old Go backend and Codebuff runtime are no longer the active app.
+See [architecture.md](architecture.md) for a full breakdown of the system design, data flow, and key decisions.
 
 ## Project Layout
 
-```txt
+```
 app/
-  src/proxy.ts                         Next.js 16 proxy — refreshes Supabase session cookies
-  src/app/auth/callback/route.ts       OAuth code → Supabase session exchange
-  src/app/api/chat/[agentId]/route.ts  Next.js → Mastra proxy, injects resourceId + JWT
-  src/app/login/page.tsx               Sign-in page (Google)
-  src/app/page.tsx                     Home — reads Supabase user server-side
-  src/components/assistant.tsx         Assistant UI chat frontend + auth header
-  src/components/login-form.tsx        Google sign-in button
-  src/lib/supabase/server.ts           Server-side Supabase client (cookies)
-  src/lib/supabase/client.ts           Browser Supabase client
+  src/proxy.ts                              Next.js middleware — refreshes Supabase session cookies
+  src/app/auth/callback/route.ts            Google OAuth code → Supabase session exchange
+  src/app/api/chat/[agentId]/route.ts       Authenticated proxy: injects resourceId + JWT, forwards to Mastra
+  src/app/api/access/route.ts               Cross-user access management (grant / revoke / list)
+  src/app/page.tsx                          Home — reads Supabase user server-side
+  src/components/assistant.tsx             Chat UI — side-by-side panes, profile toggle pills
+  src/components/access-settings.tsx       Manage access modal (grant / revoke grantees)
+  src/components/login-form.tsx            Google sign-in button
+  src/lib/supabase/server.ts               Server-side Supabase client (cookies)
+  src/lib/supabase/client.ts               Browser Supabase client
 
 orchestra/
-  src/cli.ts                           local interactive CLI
-  src/mastra/index.ts                  Mastra instance, agents, storage, auth, /chat/:agentId
-  src/mastra/agents/                   orchestrator and research agents
-  src/mastra/tools/                    researchRestaurant tool
-  src/mastra/memory/                   Mastra working memory (LibSQL, scope: "resource")
-  .mastra-project.json                 linked Mastra project (`food-agent`)
+  src/mastra/index.ts                      Mastra instance, agents, storage, auth, custom routes
+  src/mastra/agents/find-food.ts           Orchestrator agent
+  src/mastra/agents/research-restaurant.ts Research subagent
+  src/mastra/tools/research-restaurant.ts  Tool that spawns the research agent
+  src/mastra/memory/index.ts               Working memory config (LibSQL, scope: "resource")
+  src/mastra/prompts.ts                    Agent system prompts
+  src/mastra/model.ts                      Model configuration
+  src/cli.ts                               Local interactive CLI (runs agent in-process)
 
 legacy/
-  .agents/                             original Codebuff agent definitions
-  architecture.md                      legacy behavior notes
-
-plan.md                               original migration plan (historical)
-TODOs                                 TODOs
+  .agents/                                 Original Codebuff agent definitions (reference only)
+  architecture.md                          Legacy Codebuff architecture notes
 ```
 
-## Local Development
+---
 
-Backend setup:
+## Dev
+
+### Frontend
+
+```bash
+cd app
+nvm use && npm install
+npm run dev        # http://localhost:3000
+```
+
+`app/.env.local`:
+
+```bash
+MASTRA_URL=http://localhost:4111
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+### Backend
 
 ```bash
 cd orchestra
-nvm use
-npm install
+nvm use && npm install
+npm run dev        # http://localhost:4111
 ```
 
-Backend environment is read from `orchestra/.env` or the repo-root `.env`.
-Required for real agent runs:
+`orchestra/.env`:
 
 ```bash
 EXA_API_KEY=...
 OPENROUTER_API_KEY=...
 SUPABASE_URL=...
 SUPABASE_ANON_KEY=...
-```
-
-Optional production/shared storage:
-
-```bash
-MASTRA_DB_URL=libsql://<db-name>-<org>.<region>.turso.io
+MASTRA_DB_URL=libsql://<db>.<region>.turso.io   # optional: shared Turso instead of local SQLite
 MASTRA_DB_AUTH_TOKEN=...
 ```
 
-Run the Mastra dev server:
+CLI (runs the agent in-process without an HTTP server):
 
 ```bash
-cd orchestra
-npm run dev
+cd orchestra && npm run cli
 ```
 
-This starts the local backend at:
+---
 
-```txt
-http://localhost:4111
-POST http://localhost:4111/chat/findFood
-```
+## Prod
 
-Frontend setup:
+### Frontend
 
-```bash
-cd app
-npm install
-npm run dev
-```
+Hosted on **Vercel** — `https://find-food-kohl.vercel.app/`
 
-Open:
-
-```txt
-http://localhost:3000
-```
-
-The frontend defaults to `http://localhost:4111/chat/findFood`. Override the
-backend base URL with `NEXT_PUBLIC_MASTRA_URL` if needed.
-
-### CLI
-
-The CLI runs the same Mastra agent in-process; it does not call an HTTP server.
-
-```bash
-cd orchestra
-npm run cli
-```
-
-### Optional Custom HTTP Server
-
-`orchestra/src/server.ts` provides a separate hand-rolled SSE API:
-
-```bash
-cd orchestra
-npm run serve
-```
-
-```txt
-GET  http://127.0.0.1:3000/health
-POST http://127.0.0.1:3000/api/chat
-```
-
-The Next frontend does not use this server.
-
-## Production Architecture
-
-Production is split across two hosts:
-
-- **Vercel frontend** - `https://find-food-kohl.vercel.app/`
-- **Mastra Server backend** - `https://food-agent.server.mastra.cloud/`
-
-The deployed frontend calls:
-
-```txt
-https://food-agent.server.mastra.cloud/chat/findFood
-```
-
-The Mastra Studio/dashboard is separate:
-
-```txt
-https://food-agent.studio.mastra.cloud
-```
-
-## Deploy
-
-### Backend: Mastra Server
-
-Run from `orchestra/`:
-
-```bash
-mastra server deploy
-```
-
-This updates the API used by the Vercel frontend, including:
-
-```txt
-POST /chat/findFood
-GET  /api/agents
-POST /api/agents/:agentId/generate
-```
-
-If backend environment variables changed, update them on Mastra Server:
-
-```bash
-mastra server env import .env
-```
-
-Deploy Studio only when the dashboard/playground bundle needs to be updated:
-
-```bash
-mastra studio deploy --project food-agent
-```
-
-### Frontend: Vercel
-
-Import the GitHub repo into Vercel and set:
-
-```txt
-Root Directory: app
-Framework: Next.js
-Build Command: npm run build
-```
-
-Set these Vercel environment variables:
+Deploy by pushing to `main`. Set these environment variables in the Vercel project:
 
 ```bash
 MASTRA_URL=https://food-agent.server.mastra.cloud
@@ -217,44 +136,72 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-Also add your production URL to the Supabase redirect URL allowlist:
-`https://your-production-domain.com/auth/callback`
+Add your production URL to the Supabase redirect allowlist: `https://your-domain.com/auth/callback`
 
-Do not put backend secrets such as `OPENROUTER_API_KEY` or `EXA_API_KEY`
-in the Vercel frontend project. Those belong on the Mastra Server deployment.
+Do not add backend secrets (`EXA_API_KEY`, `OPENROUTER_API_KEY`, `MASTRA_DB_*`) to the Vercel project.
 
-## Verify
+### Backend
 
-Frontend:
-
-```bash
-cd app
-npm run lint
-npm run build
-```
-
-Backend:
+Hosted on **Mastra Server** — `https://food-agent.server.mastra.cloud/`
 
 ```bash
 cd orchestra
-npm run typecheck
+mastra server deploy
+
+# If env vars changed:
+mastra server env import .env
 ```
 
-Production backend:
+Smoke test:
 
 ```bash
 curl https://food-agent.server.mastra.cloud/api/agents
 curl -i -X POST https://food-agent.server.mastra.cloud/chat/findFood
 ```
 
-For the chat route, a non-404 response means the `chatRoute` is deployed. A
-400-style response can be expected if the probe has no request body.
+---
 
-## More Detail
+## Database
 
-- Backend details, memory, Turso, observability, and deployment notes:
-  `orchestra/README.md`
-- Frontend package:
-  `app/`
-- Legacy Codebuff reference:
-  `legacy/`
+### Mastra (Turso / LibSQL)
+
+Stores agent working memory, thread history, and observability spans.
+
+- **Production**: `libsql://find-food-tanzeelak.aws-us-east-2.turso.io`
+- **Local dev**: SQLite files under `orchestra/.mastra/` (auto-created)
+- Credentials: `MASTRA_DB_URL` + `MASTRA_DB_AUTH_TOKEN` in `orchestra/.env`
+
+Schema is managed by Mastra automatically (no migrations to run manually).
+
+### Supabase (PostgreSQL)
+
+Stores user identity and cross-user access grants.
+
+- **Project**: `tahcqfcxohlqrnzclovr.supabase.co`
+- Tables: `auth.users` (managed by Supabase), `public.profiles`, `public.profile_access`
+- RLS is enabled on all public tables — policies enforce that users can only read/write their own data
+- Schema changes must be run manually in the **Supabase SQL Editor**
+
+---
+
+## Observability
+
+### Mastra
+
+Traces and agent runs are visible in **Mastra Studio**: `https://food-agent.studio.mastra.cloud`
+
+Deploy Studio separately when the dashboard bundle needs updating:
+
+```bash
+mastra studio deploy --project food-agent
+```
+
+Observability data (spans, traces) is stored in a local DuckDB file (`orchestra/.mastra/find-food-observability.duckdb`) in dev, and on the Mastra Server in prod.
+
+### Supabase
+
+User signups, active sessions, and auth events are visible in the **Supabase dashboard** under Authentication → Users and Auth → Logs. Row-level access to `profiles` and `profile_access` can be inspected in the Table Editor.
+
+### Google OAuth
+
+OAuth consent and sign-in activity is visible in the **Google Cloud Console** under APIs & Services → Credentials → your OAuth 2.0 client. Quota usage and error rates appear under APIs & Services → Google Identity.
