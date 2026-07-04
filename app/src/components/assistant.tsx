@@ -17,6 +17,7 @@ import {
 } from "@assistant-ui/react-ai-sdk";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { AccessSettings } from "@/components/access-settings";
 
 const AGENT_ID = "findFood";
 
@@ -157,9 +158,14 @@ export function Assistant({ user }: { user: User | null }) {
   const resourceId = user?.id ?? guestResourceId;
   const [grantedProfiles, setGrantedProfiles] = useState<Profile[]>([]);
   const [visiblePanes, setVisiblePanes] = useState<Set<string>>(new Set());
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setGrantedProfiles([]);
+      setVisiblePanes(new Set());
+      return;
+    }
     fetch("/api/access")
       .then((r) => r.json())
       .then((data) => {
@@ -218,7 +224,15 @@ export function Assistant({ user }: { user: User | null }) {
           );
         })}
 
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          {user && (
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+            >
+              Manage access
+            </button>
+          )}
           {user ? (
             <button
               onClick={signOut}
@@ -235,6 +249,8 @@ export function Assistant({ user }: { user: User | null }) {
             </button>
           )}
         </div>
+
+        {showSettings && <AccessSettings onClose={() => setShowSettings(false)} />}
       </div>
 
       <div className="flex min-h-0 flex-1">

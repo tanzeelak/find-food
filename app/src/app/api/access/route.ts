@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -9,6 +9,31 @@ export async function GET() {
 
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  const asOwner = new URL(request.url).searchParams.get("as") === "owner";
+
+  if (asOwner) {
+    // Return grantees — people I've granted access to my profile
+    const { data: rows, error: accessError } = await supabase
+      .from("profile_access")
+      .select("grantee_id")
+      .eq("owner_id", user.id);
+
+    if (accessError) return NextResponse.json({ error: accessError.message }, { status: 500 });
+
+    const granteeIds = (rows ?? []).map((r: { grantee_id: string }) => r.grantee_id);
+    if (granteeIds.length === 0) return NextResponse.json([]);
+
+    const { data: profiles, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, email, display_name")
+      .in("id", granteeIds);
+
+    if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
+
+    return NextResponse.json(profiles ?? []);
+  }
+
+  // Default: return owners who have granted me access
   const { data: rows, error: accessError } = await supabase
     .from("profile_access")
     .select("owner_id")
