@@ -1,63 +1,65 @@
 TODOS
-[ ] Cross-user read-only access via Supabase (replaces Mastra FGA / Permit.io approach)
-    Goal: user B can use the agent to find food FOR user A using A's dietary profile.
-    Owner (user A) explicitly grants read access to user B. Enforced server-side.
+[ ] Request access flow
+      Goal: user B can request access to user A's profile; user A approves/denies in settings panel.
 
     --- STEP 1: Supabase schema (run in SQL Editor) ---
-    [ ] Create profiles table + trigger (auto-populated on sign-up):
-          create table public.profiles (
-            id uuid primary key references auth.users(id) on delete cascade,
-            email text, display_name text, created_at timestamptz default now()
-          );
-          -- RLS: publicly readable, owner can update
-          -- Trigger: handle_new_user() inserts row on auth.users insert
-    [ ] Create profile_access table:
-          create table public.profile_access (
+    [ ] Create profile_access_requests table:
+          create table public.profile_access_requests (
+            id uuid primary key default gen_random_uuid(),
             owner_id uuid references auth.users(id) on delete cascade,
-            grantee_id uuid references auth.users(id) on delete cascade,
+            requester_id uuid references auth.users(id) on delete cascade,
             created_at timestamptz default now(),
-            primary key (owner_id, grantee_id)
+            unique (owner_id, requester_id)
           );
-          -- RLS: owner/grantee can SELECT; only owner can INSERT/DELETE
-    [ ] Backfill existing users:
-          insert into public.profiles (id, email, display_name)
-          select id, email, raw_user_meta_data->>'full_name' from auth.users
-          on conflict (id) do nothing;
+          -- RLS: owner/requester can SELECT; only requester can INSERT; both can DELETE
+          alter table public.profile_access_requests enable row level security;
+          create policy "requests_select" on public.profile_access_requests
+            for select using (auth.uid() = owner_id or auth.uid() = requester_id);
+          create policy "requests_insert" on public.profile_access_requests
+            for insert with check (auth.uid() = requester_id);
+          create policy "requests_delete" on public.profile_access_requests
+            for delete using (auth.uid() = owner_id or auth.uid() = requester_id);
 
-    --- STEP 2: Next.js API routes (app/src/app/api/access/) ---
-    [ ] GET  /api/access — returns profiles the current user can access
-          Query: profile_access WHERE grantee_id = me, JOIN profiles on owner_id
-          Response: [{ id, email, display_name }]
-    [ ] POST /api/access — grant access to a grantee by email
+    --- STEP 2: Next.js API routes (app/src/app/api/access/requests/) ---
+    [ ] GET  /api/access/requests — returns pending requests to MY profile (I'm the owner)
+          Query: profile_access_requests WHERE owner_id = me, JOIN profiles on requester_id
+          Response: [{ id, requester: { id, email, display_name } }]
+    [ ] POST /api/access/requests — request access to someone's profile by email (I'm the requester)
           Body: { email: string }
-          Lookup grantee in profiles by email, insert (owner_id=me, grantee_id)
-    [ ] DELETE /api/access — revoke access
-          Body: { granteeId: string }
-          Delete row where owner_id=me AND grantee_id=granteeId
+          Lookup owner in profiles by email, insert (owner_id, requester_id=me)
+    [ ] DELETE /api/access/requests — deny or cancel a request
+          Body: { requestId: string }
+          Delete row where id=requestId AND (owner_id=me OR requester_id=me)
+    [ ] POST /api/access/requests/approve — owner approves a request
+          Body: { requestId: string }
+          Lookup request, insert into profile_access (owner_id=me, grantee_id=requester_id), delete request
 
-    --- STEP 3: Chat proxy update (app/src/app/api/chat/[agentId]/route.ts) ---
-    [ ] Accept optional targetResourceId in request body
-          If present and user is authenticated:
-            verify profile_access row exists (owner_id=targetResourceId, grantee_id=me)
-            if verified: inject memory.resource = targetResourceId
-            if not verified: 403
-          If absent: inject memory.resource = session.user.id (existing behaviour)
+    --- STEP 3: Settings panel UI (app/src/components/access-settings.tsx) ---
+    [ ] Add "Pending requests" section — show requesters with Approve / Deny buttons
+    [ ] Add "Request access" section — email input + Request button
+    [ ] Show "My sent requests" — requests I've sent, with Cancel button (optional)
 
-    --- STEP 4: Frontend ---
-    [ ] Profile selector dropdown in assistant.tsx header
-          Fetch GET /api/access on mount (only when signed in)
-          Options: "Me" (own profile) + any granted profiles
-          Default: "Me"
-          On change: pass selectedResourceId into ChatPanel as resourceId prop
-          (ChatPanel already accepts resourceId and sends it in the body)
-    [ ] Settings / access management panel (optional, can do later)
-          Let owner grant/revoke access via POST/DELETE /api/access
-          Show current grantees
+[ ] Merged pane view — single chat that combines context from multiple profiles
 [ ] Use Mintlify
 [ ] Improve location search
 [ ] Have the frontend show more thinking so it's more apparently responsive
-[ ] make frontend scroll a fixed window
+[ ] Make frontend scroll a fixed window
 [ ] Switch to a cheaper model on the backend
+
+[x] Cross-user read-only access via Supabase
+    Goal: user B can use the agent to find food FOR user A using A's dietary profile.
+    Owner (user A) explicitly grants read access to user B. Enforced server-side.
+    - profiles table + trigger (auto-populated on sign-up)
+    - profile_access table with RLS (owner/grantee SELECT; only owner INSERT/DELETE)
+    - GET /api/access?as=owner — grantees of my profile
+    - GET /api/access — profiles I can access (owners who granted me)
+    - POST /api/access — grant access to a grantee by email
+    - DELETE /api/access — revoke access by granteeId
+    - Chat proxy verifies grant and injects owner's working memory as read-only context;
+      memory.resource stays as grantee_id so writes never touch the owner's profile
+    - GET /working-memory/:resourceId on Mastra server (public route)
+    - Frontend: side-by-side panes (not dropdown); toggle pills per granted profile
+    - Settings panel: Manage access modal — grant/revoke, show current grantees
 [x] agent that can acess the yelp or exa MCP
 [x] search for "gluten free" restaurants
 [x] Auth: Supabase + Google sign-in
