@@ -8,6 +8,8 @@ import { MastraAuthSupabase } from "@mastra/auth-supabase";
 import { resolveLibSQLConnection, resolveDataPath, getEnv } from "./env.js";
 import { findFoodAgent } from "./agents/find-food.js";
 import { researchRestaurantAgent } from "./agents/research-restaurant.js";
+import { memory } from "./memory/index.js";
+import type { Context } from "hono";
 
 // LibSQL cannot persist observability metrics (only traces), so the
 // observability domain is routed to DuckDB, an OLAP store that supports them.
@@ -52,7 +54,18 @@ export const mastra = new Mastra({
     apiRoutes: [
       // AI SDK-compatible chat endpoint for the assistant-ui frontend.
       // findFood is exposed at POST /chat/findFood.
-      chatRoute({ path: "/chat/:agentId", sendReasoning: true })
+      chatRoute({ path: "/chat/:agentId", sendReasoning: true }),
+      {
+        path: "/working-memory/:resourceId",
+        method: "GET",
+        requiresAuth: false,
+        handler: async (c: Context) => {
+          const resourceId = c.req.param("resourceId");
+          // threadId is required by the signature but unused when scope is "resource"
+          const workingMemory = await memory.getWorkingMemory({ threadId: "", resourceId });
+          return c.json({ workingMemory: workingMemory ?? null });
+        }
+      }
     ]
   }
 });

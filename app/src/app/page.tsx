@@ -7,7 +7,7 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
   return (
-    <div className="flex flex-1 justify-center">
+    <div className="flex flex-1">
       <Assistant user={user} />
     </div>
   );
