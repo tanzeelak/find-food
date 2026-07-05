@@ -75,6 +75,7 @@ The primary agent. Receives the user's message and manages the full search loop.
 
 - **Model**: configured via OpenRouter (see `orchestra/src/mastra/model.ts`)
 - **Tools**: `researchRestaurant` — spawns a bounded research agent for a specific restaurant
+- **Tools**: `checkDistance` — verifies walking time via Mapbox geocoding + Directions API; filters restaurants outside the user's requested threshold (default 10 min)
 - **MCP**: Exa — web search for restaurant discovery
 - **Memory**: Mastra working memory (scope: `"resource"`) — stores the user's dietary profile, home location, food preferences across sessions
 
@@ -182,7 +183,9 @@ The "Manage access" modal lets owners:
      b. Loads working memory for memory.resource from LibSQL
      c. Runs findFood agent with memory context injected into system prompt
      d. Agent calls Exa MCP and/or researchRestaurant tool
-     e. Agent updates working memory if new facts learned
+     e. Agent calls checkDistance tool (Mapbox geocoding + walking Directions API) to
+        filter restaurants outside the user's requested walking threshold
+     f. Agent updates working memory if new facts learned
      f. Streams response back via SSE
 
 5. Next.js proxy streams response to browser
@@ -197,11 +200,12 @@ The "Manage access" modal lets owners:
 |---|---|---|
 | **Supabase** | Auth (Google OAuth), user profiles, access control (RLS) | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
 | **Google OAuth** | Identity provider — sign-in with Google | Configured in Supabase dashboard |
-| **Exa** | Web search — restaurant discovery + menu lookup | `EXA_API_KEY` (Mastra backend only) |
+| **Exa** | Web search — restaurant discovery + menu lookup (search + page fetch) | `EXA_API_KEY` (Mastra backend only) |
+| **Mapbox** | Walking distance verification — geocoding + Directions API (walking profile) | `MAPBOX_TOKEN` (Mastra backend only) |
 | **OpenRouter** | Model routing to Anthropic and other providers | `OPENROUTER_API_KEY` (Mastra backend only) |
 | **Turso / LibSQL** | Agent memory + thread storage + observability | `MASTRA_DB_URL`, `MASTRA_DB_AUTH_TOKEN` |
 | **Vercel** | Frontend hosting | GitHub integration |
 | **Mastra Server** | Backend hosting for the AI agents | `MASTRA_PLATFORM_ACCESS_TOKEN` |
 
 Frontend secrets: only `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (both safe to expose).
-Backend secrets: `EXA_API_KEY`, `OPENROUTER_API_KEY`, `MASTRA_DB_*` — never in the frontend.
+Backend secrets: `EXA_API_KEY`, `MAPBOX_TOKEN`, `OPENROUTER_API_KEY`, `MASTRA_DB_*` — never in the frontend.

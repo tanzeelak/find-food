@@ -4,6 +4,7 @@ import { findFoodInstructions } from "../prompts.js";
 import { exaSearchTools } from "../mcp/exa.js";
 import { memory } from "../memory/index.js";
 import { researchRestaurantTool } from "../tools/research-restaurant.js";
+import { checkDistanceTool } from "../tools/check-distance.js";
 
 export const findFoodAgent = new Agent({
   id: "find-food",
@@ -14,6 +15,7 @@ export const findFoodAgent = new Agent({
   memory,
   tools: async () => ({
     ...(await exaSearchTools()),
-    researchRestaurant: researchRestaurantTool
+    researchRestaurant: researchRestaurantTool,
+    checkDistance: checkDistanceTool,
   })
 });

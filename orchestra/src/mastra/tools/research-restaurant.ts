@@ -39,20 +39,42 @@ Dietary restrictions: ${joinOrNone(dietaryRestrictions)}
 Cite every URL you fetched.`
       );
 
-      // Phase 2: tool-free structuring pass over the findings text.
+      // Phase 2: tool-free structuring pass — model returns raw JSON, we validate with Zod.
+      // Avoids Mastra's internal structured output validation throwing on Zod v4 when
+      // the model returns nothing (e.g. empty research result).
       const structured = await researchRestaurantAgent.generate(
-        `Convert the following restaurant research into the required structured result for "${restaurantName}". Only include menu items the research supports as satisfying every dietary restriction. If none qualify, set hasSuitableItems to false and return an empty menuItems array.
+        `Convert the following restaurant research into a JSON object for "${restaurantName}".
+Return ONLY a raw JSON object — no markdown, no code fences, no commentary.
+
+Required shape:
+{
+  "restaurantName": string,
+  "hasSuitableItems": boolean,
+  "menuItems": [{ "name": string, "price": string, "whyItFits": string, "caveats": string[] }],
+  "dietaryAccommodations": string[],
+  "menuUrl": string,
+  "sourceUrls": string[],
+  "confidence": "low" | "medium" | "high",
+  "notes": string
+}
+
+Only include menu items the research supports as satisfying every dietary restriction. If none qualify, set hasSuitableItems to false and menuItems to [].
 
 Research:
 ${research.text}`,
-        {
-          activeTools: [],
-          structuredOutput: { schema: researchResultSchema, jsonPromptInjection: true }
-        }
+        { activeTools: [] }
       );
 
-      const parsed = researchResultSchema.safeParse(structured.object);
-      return parsed.success ? parsed.data : fallback("Structuring pass returned no valid result.");
+      try {
+        const cleaned = structured.text
+          .replace(/^```(?:json)?\n?/, "")
+          .replace(/\n?```$/, "")
+          .trim();
+        const parsed = researchResultSchema.safeParse(JSON.parse(cleaned));
+        return parsed.success ? parsed.data : fallback("Structuring pass returned invalid shape.");
+      } catch {
+        return fallback("Structuring pass returned non-JSON output.");
+      }
     } catch (error) {
       return fallback(`Research failed: ${error instanceof Error ? error.message : String(error)}`);
     }

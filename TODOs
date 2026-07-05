@@ -1,5 +1,19 @@
 TODOS
-[ ] Improve location search
+[ ] Agent prompt/tooling improvements (from session observation):
+    [x] (1) Silent while tool-calling — agent goes quiet during checkDistance calls with no narration.
+              Fix: prompt the orchestrator to always announce what it's doing before kicking off
+              multiple tool calls, not after.
+    [x] (2) Missed follow-up search request — after a food query mid-conversation the agent
+              sometimes ignores it and takes 2-3 re-prompts to actually search.
+              Fix: prompt the orchestrator that any food/location request must trigger an
+              immediate search, even mid-conversation.
+    [ ] (3) Wrong address passed to checkDistance — Exa scrapes a bad address, Mapbox geocodes
+              it confidently, distance result is silently wrong.
+              Fix: geocode using restaurantName + city only, ignore scraped address strings.
+    [ ] (4) Missed obvious local spots — narrow Exa search query misses well-known nearby places.
+              Fix: try multiple search queries or broaden the initial candidate search.
+    [ ] (5) No pushback on bad geocode — if Mapbox place_name doesn't match the restaurant name,
+              agent should flag the mismatch rather than trust the result silently.
 [ ] Have the frontend show more thinking so it's more apparently responsive
 [ ] Consider adding evals
 [ ] Request access flow
@@ -43,6 +57,7 @@ TODOS
 [ ] Use Mintlify
 [ ] Make frontend scroll a fixed window
 [ ] Switch to a cheaper model on the backend
+    - https://openrouter.ai/z-ai/glm-5.2
 
 [x] Cross-user read-only access via Supabase
     Goal: user B can use the agent to find food FOR user A using A's dietary profile.
@@ -75,3 +90,4 @@ TODOS
     - scope: "resource" stores working memory per resourceId across threads
 [x] Remove unused env vars
 [x] Use tools for research agent
+[x] Locaition search uses mapbox
