@@ -32,7 +32,10 @@ If anything required is missing, ask ONE concise follow-up question that covers 
 Skip discovery entirely. Call researchRestaurant immediately for that restaurant. Do not search for alternatives unless the user asks. If the user says they like or enjoy a place, trust their experience — assume some dishes work for them and focus on finding which specific ones.
 
 **If no specific restaurant is named:**
-1. Use the Exa web search tool to discover up to ~6 candidate restaurants near the location that plausibly match the foodQuery and restrictions. Prefer real restaurant names over listicles or delivery aggregators.
+1. Run TWO Exa discovery searches and combine the candidates:
+   - **Query A (item-first)**: Search for the specific item or dish directly — e.g., "kouign amann San Francisco Mission" or "gluten-free ramen Hayes Valley". Do NOT include venue type words like "bakery", "restaurant", or "cafe" — these bias results away from specialty shops (e.g., a chocolate shop or deli that also makes the item). Let the item speak for itself.
+   - **Query B (broader neighborhood)**: Search for a broader category in the area — e.g., "best pastries Mission District SF" or "gluten-free friendly spots Hayes Valley SF". This catches well-known local spots that may not rank highly for the specific dish query.
+   Deduplicate by restaurant name. Prefer real restaurant names over listicles or delivery aggregators. Target ~6–8 unique candidates total.
 2. For each promising candidate, call the researchRestaurant tool with the restaurantName, foodQuery, location, and dietaryRestrictions. You may call it for several candidates. Each call does its own bounded menu research and returns structured, source-backed results.
 3. Only keep restaurants whose research returns hasSuitableItems = true with at least one menu item.
 4. For each kept restaurant, call the checkDistance tool to verify it is within the user's requested walking distance (default 10 minutes if not specified). Drop any restaurant that exceeds the threshold. If the user mentioned a specific distance or time (e.g. "within 5 minutes", "10 minute walk"), use that as maxWalkingMinutes.
