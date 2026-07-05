@@ -16,6 +16,11 @@ TODOS
               agent should flag the mismatch rather than trust the result silently.
 [ ] Have the frontend show more thinking so it's more apparently responsive
 [ ] Consider adding evals
+[ ] Enable prompt caching — research agent is the main cost driver (re-sends system prompt on every
+      Phase 1 + Phase 2 call; researchRestaurant called up to 8x per query). Options:
+      - Anthropic: opt-in via anthropic-beta header + cache_control breakpoints (OpenRouter passes through)
+      - Gemini Flash 2.5: explicit context caching API, good fit for large stable system prompts
+      - GPT-4o-mini: automatic prefix caching on prompts >1024 tokens, no config needed
 [ ] Request access flow
       Goal: user B can request access to user A's profile; user A approves/denies in settings panel.
     --- STEP 1: Supabase schema (run in SQL Editor) ---
@@ -56,7 +61,9 @@ TODOS
 [ ] Merged pane view — single chat that combines context from multiple profiles
 [ ] Use Mintlify
 [ ] Make frontend scroll a fixed window
-[ ] Switch to a cheaper model on the backend
+[ ] Switch to a cheaper model on the backend — consider Gemini Flash 2.5 (cheap + good tool use +
+      explicit context caching) or GPT-4o-mini (automatic prefix caching). GLM-5.2 is an option
+      but tool use reliability is less proven for complex orchestration.
     - https://openrouter.ai/z-ai/glm-5.2
 
 [x] Cross-user read-only access via Supabase
